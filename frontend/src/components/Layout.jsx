@@ -1,6 +1,9 @@
 import { Link } from "react-router-dom";
+import { clearStoredAuth, getStoredAuth } from "../auth.js";
 
 export default function Layout({ children }) {
+  const auth = typeof window === "undefined" ? null : getStoredAuth();
+
   return (
     <div className="page-shell">
       <header className="site-header">
@@ -8,8 +11,24 @@ export default function Layout({ children }) {
           Монголын 3D өвийн сан
         </Link>
         <nav>
-          <a href="#catalog">Каталог</a>
-          <a href="#platform">Платформын тухай</a>
+          <Link to="/">Каталог</Link>
+          <Link to="/artifacts/new">Шинэ дурсгал</Link>
+          <Link to="/reconstruction-lab">Фотограмметрийн туршилт</Link>
+          {!auth?.user && <Link to="/login">Нэвтрэх</Link>}
+          {!auth?.user && <Link to="/register">Бүртгүүлэх</Link>}
+          {auth?.user && <span className="user-chip">{auth.user.fullName}</span>}
+          {auth?.user && (
+            <button
+              type="button"
+              className="nav-button"
+              onClick={() => {
+                clearStoredAuth();
+                window.location.href = "/";
+              }}
+            >
+              Гарах
+            </button>
+          )}
         </nav>
       </header>
       <main>{children}</main>

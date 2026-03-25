@@ -20,7 +20,8 @@ function mapArtifact(row) {
     gallery: row.gallery,
     modelEmbedUrl: row.model_embed_url,
     tags: row.tags,
-    status: row.status
+    status: row.status,
+    createdByUserId: row.created_by_user_id || null
   };
 }
 
@@ -118,11 +119,12 @@ export async function createArtifact(artifact) {
         gallery,
         model_embed_url,
         tags,
-        status
+        status,
+        created_by_user_id
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-        $11, $12, $13, $14::jsonb, $15, $16::jsonb, $17
+        $11, $12, $13, $14::jsonb, $15, $16::jsonb, $17, $18
       )
       RETURNING *
     `,
@@ -143,7 +145,8 @@ export async function createArtifact(artifact) {
       JSON.stringify(artifact.gallery),
       artifact.modelEmbedUrl,
       JSON.stringify(artifact.tags),
-      artifact.status
+      artifact.status,
+      artifact.createdByUserId || null
     ]
   );
 

@@ -7,6 +7,7 @@ import {
   getArtifacts,
   updateArtifact
 } from "../repositories/artifactsRepository.js";
+import { requireRole } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -87,7 +88,7 @@ router.get("/:slug", async (req, res, next) => {
   }
 });
 
-router.post("/", async (req, res, next) => {
+router.post("/", requireRole("researcher", "admin"), async (req, res, next) => {
   try {
     const artifact = normalizeArtifactPayload(req.body);
     const validationMessage = validateArtifactPayload(artifact);
@@ -96,14 +97,17 @@ router.post("/", async (req, res, next) => {
       return res.status(400).json({ message: validationMessage });
     }
 
-    const created = await createArtifact(artifact);
+    const created = await createArtifact({
+      ...artifact,
+      createdByUserId: req.user.id
+    });
     return res.status(201).json(created);
   } catch (error) {
     next(error);
   }
 });
 
-router.put("/:slug", async (req, res, next) => {
+router.put("/:slug", requireRole("researcher", "admin"), async (req, res, next) => {
   try {
     const current = await getArtifactBySlug(req.params.slug);
 
@@ -125,7 +129,7 @@ router.put("/:slug", async (req, res, next) => {
   }
 });
 
-router.delete("/:slug", async (req, res, next) => {
+router.delete("/:slug", requireRole("researcher", "admin"), async (req, res, next) => {
   try {
     const deleted = await deleteArtifact(req.params.slug);
 

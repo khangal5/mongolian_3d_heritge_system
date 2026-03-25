@@ -1,10 +1,16 @@
 import cors from "cors";
 import express from "express";
+import { mkdir } from "node:fs/promises";
 import { config } from "./config/env.js";
 import { checkDatabaseConnection } from "./db/pool.js";
+import { optionalAuth } from "./middleware/auth.js";
 import artifactRoutes from "./routes/artifacts.js";
+import authRoutes from "./routes/auth.js";
+import reconstructionJobRoutes from "./routes/reconstructionJobs.js";
 
 const app = express();
+
+await mkdir(config.uploadDir, { recursive: true });
 
 app.use(
   cors({
@@ -12,6 +18,8 @@ app.use(
   })
 );
 app.use(express.json());
+app.use("/uploads", express.static(config.uploadDir));
+app.use(optionalAuth);
 
 app.get("/", (_req, res) => {
   res.type("html").send(`
@@ -63,6 +71,7 @@ app.get("/", (_req, res) => {
             <li><a href="/api">/api</a></li>
             <li><a href="/api/health">/api/health</a></li>
             <li><a href="/api/artifacts">/api/artifacts</a></li>
+            <li><a href="/api/reconstruction-jobs">/api/reconstruction-jobs</a></li>
           </ul>
           <p>
             Frontend аппликейшнийг тусад нь
@@ -105,12 +114,21 @@ app.get("/api", (_req, res) => {
       "GET /api/artifacts/:slug",
       "POST /api/artifacts",
       "PUT /api/artifacts/:slug",
-      "DELETE /api/artifacts/:slug"
+      "DELETE /api/artifacts/:slug",
+      "POST /api/auth/register-researcher",
+      "POST /api/auth/login",
+      "GET /api/auth/me",
+      "POST /api/auth/logout",
+      "GET /api/reconstruction-jobs",
+      "GET /api/reconstruction-jobs/:id",
+      "POST /api/reconstruction-jobs/upload"
     ]
   });
 });
 
+app.use("/api/auth", authRoutes);
 app.use("/api/artifacts", artifactRoutes);
+app.use("/api/reconstruction-jobs", reconstructionJobRoutes);
 
 app.use((error, _req, res, _next) => {
   console.error(error);

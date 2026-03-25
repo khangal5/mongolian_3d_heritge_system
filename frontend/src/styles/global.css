@@ -77,6 +77,8 @@ img {
 .site-header nav {
   display: flex;
   gap: 20px;
+  align-items: center;
+  flex-wrap: wrap;
   color: var(--muted);
 }
 
@@ -176,7 +178,8 @@ main {
 }
 
 .field input,
-.field select {
+.field select,
+.field textarea {
   border: 1px solid rgba(77, 43, 21, 0.15);
   background: var(--surface-strong);
   color: var(--text);
@@ -331,6 +334,208 @@ main {
   color: var(--muted);
 }
 
+.hero-compact h1 {
+  font-size: clamp(2.2rem, 4vw, 3.6rem);
+}
+
+.lab-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 20px;
+  margin-top: 24px;
+}
+
+.upload-form {
+  display: grid;
+  gap: 16px;
+}
+
+.field-help {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.selected-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.selected-files span {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(163, 69, 33, 0.1);
+  font-size: 0.86rem;
+}
+
+.action-button {
+  border: 0;
+  border-radius: 16px;
+  padding: 14px 18px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.action-button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.nav-button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.user-chip {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(163, 69, 33, 0.1);
+  color: var(--accent-dark);
+  font-size: 0.9rem;
+}
+
+.job-list {
+  margin-top: 28px;
+}
+
+.job-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18px;
+}
+
+.job-card {
+  padding: 20px;
+  border-radius: 24px;
+  background: rgba(255, 251, 245, 0.9);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.progress-track {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(97, 33, 13, 0.1);
+  overflow: hidden;
+  margin: 16px 0;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #a34521, #d0873f);
+}
+
+.job-metadata {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.log-list {
+  margin-top: 14px;
+  color: var(--muted);
+}
+
+.log-list p {
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+
+.form-wide {
+  margin-top: 24px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.auth-shell {
+  display: grid;
+  grid-template-columns: 0.95fr 1.05fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.auth-shell-wide {
+  grid-template-columns: 0.85fr 1.15fr;
+}
+
+.auth-side,
+.auth-card {
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+  border-radius: 30px;
+  background: rgba(255, 250, 242, 0.9);
+}
+
+.auth-side {
+  padding: 28px;
+  background:
+    radial-gradient(circle at top left, rgba(208, 135, 63, 0.18), transparent 30%),
+    linear-gradient(180deg, rgba(255, 247, 236, 0.95), rgba(245, 232, 214, 0.92));
+}
+
+.auth-side h1 {
+  margin: 10px 0 16px;
+  font-size: clamp(2.1rem, 4vw, 3.7rem);
+  line-height: 0.98;
+}
+
+.auth-card {
+  padding: 26px;
+}
+
+.auth-card-wide {
+  padding: 28px;
+}
+
+.auth-card-header h2 {
+  margin: 0 0 8px;
+  font-size: 1.8rem;
+}
+
+.auth-card-header p {
+  margin: 0 0 20px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.auth-note-list {
+  display: grid;
+  gap: 12px;
+  margin: 24px 0;
+}
+
+.auth-note-list p {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 252, 246, 0.72);
+  border: 1px solid rgba(118, 66, 34, 0.08);
+  color: var(--muted);
+}
+
+.secondary-link {
+  display: inline-flex;
+  margin-top: 10px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
 @media (max-width: 960px) {
   .hero,
   .platform-strip,
@@ -338,7 +543,12 @@ main {
   .artifact-grid,
   .detail-hero,
   .detail-columns,
-  .gallery-grid {
+  .gallery-grid,
+  .lab-grid,
+  .job-cards,
+  .form-grid,
+  .auth-shell,
+  .auth-shell-wide {
     grid-template-columns: 1fr;
   }
 
@@ -373,4 +583,3 @@ main {
     font-size: 2.4rem;
   }
 }
-
