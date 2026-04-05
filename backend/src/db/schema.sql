@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS artifacts (
   description TEXT NOT NULL,
   image_url TEXT NOT NULL,
   gallery JSONB NOT NULL DEFAULT '[]'::jsonb,
+  model_url TEXT,
   model_embed_url TEXT NOT NULL,
   tags JSONB NOT NULL DEFAULT '[]'::jsonb,
   status TEXT NOT NULL DEFAULT 'нийтлэгдсэн',
@@ -53,7 +54,8 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
 );
 
 ALTER TABLE artifacts
-  ADD COLUMN IF NOT EXISTS created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS model_url TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_artifacts_slug ON artifacts (slug);
 CREATE INDEX IF NOT EXISTS idx_artifacts_category ON artifacts (category);

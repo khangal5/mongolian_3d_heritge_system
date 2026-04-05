@@ -54,8 +54,8 @@ export function getArtifacts(params = {}) {
   const search = new URLSearchParams();
 
   Object.entries(params).forEach(([key, value]) => {
-    if (value) {
-      search.set(key, value);
+    if (value !== undefined && value !== null && value !== "") {
+      search.set(key, String(value));
     }
   });
 
@@ -77,6 +77,14 @@ export function getReconstructionJobById(id) {
 
 export function uploadReconstructionJob(formData) {
   return requestWithOptions("/reconstruction-jobs/upload", {
+    method: "POST",
+    headers: buildAuthHeaders(),
+    body: formData
+  });
+}
+
+export function uploadArtifactModel(formData) {
+  return requestWithOptions("/artifacts/upload-model", {
     method: "POST",
     headers: buildAuthHeaders(),
     body: formData

@@ -67,17 +67,14 @@ export default function RegisterPage() {
     <Layout>
       <section className="auth-shell auth-shell-wide">
         <section className="auth-side">
-          <p className="eyebrow">Шинэ бүртгэл</p>
-          <h1>Судлаачийн профайлыг илүү бүрэн мэдээлэлтэй үүсгэнэ.</h1>
+          <p className="eyebrow">Бүртгүүлэх</p>
+          <h1>Шинэ хэрэглэгчийн бүртгэл үүсгэнэ.</h1>
           <p className="hero-text">
-            Энд байгууллагын харьяалал, албан тушаал, байгууллагын имэйл, баталгаажуулах
-            баримтын зураг зэрэг талбаруудыг бөглөснөөр илүү бодит судлаачийн бүртгэлийн
-            туршилт хийх боломжтой.
+            Үндсэн мэдээллээ оруулаад баталгаажуулах файлаа хавсаргана.
           </p>
           <div className="auth-note-list">
-            <p>Байгууллагын имэйл болон хувийн нэвтрэх имэйл тусдаа байж болно.</p>
-            <p>Ажилтны үнэмлэх, судлаачийн карт, эсвэл байгууллагын баталгааны зураг оруулна.</p>
-            <p>Бүртгэл үүссэний дараа шууд нэвтэрч орж дурсгал нэмэх боломжтой.</p>
+            <p>Байгууллагын имэйл болон нэвтрэх имэйл өөр байж болно.</p>
+            <p>Баталгаажуулах зураг эсвэл PDF файл хавсаргана.</p>
           </div>
           <Link to="/login" className="secondary-link">
             Бүртгэлтэй хэрэглэгч нэвтрэх
@@ -87,7 +84,7 @@ export default function RegisterPage() {
         <form className="auth-card auth-card-wide" onSubmit={handleRegister}>
           <div className="auth-card-header">
             <h2>Шинэ хэрэглэгч бүртгэх</h2>
-            <p>Судалгааны байгууллагын харьяалал, баталгаажуулах мэдээллээ бөглөнө үү.</p>
+            <p>Мэдээллээ бөглөөд бүртгэл үүсгэнэ.</p>
           </div>
 
           <div className="form-grid">
@@ -147,7 +144,7 @@ export default function RegisterPage() {
               onChange={(event) => setProofImage(event.target.files?.[0] || null)}
             />
             <p className="field-help">
-              Байгууллагын үнэмлэх, ажилтны карт, эсвэл таны харьяаллыг нотлох зураг/PDF файл.
+              Зураг эсвэл PDF файл.
             </p>
           </div>
 

@@ -35,15 +35,13 @@ export default function LoginPage() {
       <section className="auth-shell">
         <section className="auth-side">
           <p className="eyebrow">Нэвтрэх</p>
-          <h1>Судлаачийн эрхээр систем рүү орно.</h1>
+          <h1>Бүртгэлтэй хэрэглэгч нэвтэрнэ.</h1>
           <p className="hero-text">
-            Нэвтэрсний дараа role-based эрхээр шинэ дурсгал бүртгэх, дараа нь
-            судалгааны өгөгдөл оруулах, фотограмметрийн туршилтын урсгалд оролцоно.
+            Нэвтэрсний дараа шинэ дурсгал болон 3D файл нэмэх боломжтой.
           </p>
           <div className="auth-note-list">
-            <p>Шинэ дурсгал нэмэх эрх зөвхөн нэвтэрсэн хэрэглэгчид нээлттэй.</p>
-            <p>Байгууллагын баталгаажуулалтын баримт бүхий бүртгэл үүсгэж болно.</p>
-            <p>Хэрэв бүртгэлгүй бол доорх холбоосоор шинэ хэрэглэгч үүсгэнэ.</p>
+            <p>Зөвхөн нэвтэрсэн хэрэглэгч шинэ дурсгал нэмнэ.</p>
+            <p>Бүртгэлгүй бол шинэ хэрэглэгч үүсгэнэ.</p>
           </div>
           <Link to="/register" className="secondary-link">
             Шинэ бүртгэл үүсгэх
@@ -53,7 +51,7 @@ export default function LoginPage() {
         <form className="auth-card" onSubmit={handleLogin}>
           <div className="auth-card-header">
             <h2>Нэвтрэх</h2>
-            <p>Имэйл болон нууц үгээ ашиглан нэвтэрнэ.</p>
+            <p>Имэйл болон нууц үгээ оруулна.</p>
           </div>
 
           <div className="field">
@@ -77,7 +75,7 @@ export default function LoginPage() {
               onChange={(event) =>
                 setLoginForm((current) => ({ ...current, password: event.target.value }))
               }
-              placeholder="Нууц үгээ оруулна уу"
+              placeholder="Нууц үг"
             />
           </div>
 

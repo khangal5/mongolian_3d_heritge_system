@@ -3,11 +3,18 @@ import { Link } from "react-router-dom";
 export default function ArtifactCard({ artifact }) {
   return (
     <article className="artifact-card">
-      <img src={artifact.imageUrl} alt={artifact.name} className="artifact-card-image" />
+      <div className="artifact-card-media">
+        <img src={artifact.imageUrl} alt={artifact.name} className="artifact-card-image" />
+        <div className="artifact-card-overlay">
+          <span>{artifact.category}</span>
+          <span>{artifact.period}</span>
+        </div>
+      </div>
+
       <div className="artifact-card-body">
         <div className="artifact-meta-row">
-          <span>{artifact.category}</span>
           <span>{artifact.province}</span>
+          <span>{artifact.location}</span>
         </div>
         <h3>{artifact.name}</h3>
         <p className="artifact-card-title-mn">{artifact.nameMn}</p>

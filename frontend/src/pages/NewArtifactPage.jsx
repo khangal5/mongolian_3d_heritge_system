@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createArtifactRequest } from "../api/client.js";
+import { createArtifactRequest, uploadArtifactModel } from "../api/client.js";
 import { getStoredAuth } from "../auth.js";
 import Layout from "../components/Layout.jsx";
 
@@ -16,16 +16,33 @@ const initialForm = {
   shortDescription: "",
   description: "",
   imageUrl: "",
-  modelEmbedUrl: "",
+  modelUrl: "",
   gallery: "",
   tags: ""
 };
 
 export default function NewArtifactPage() {
   const [form, setForm] = useState(initialForm);
+  const [modelFile, setModelFile] = useState(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [uploadStatus, setUploadStatus] = useState("idle");
   const auth = typeof window === "undefined" ? null : getStoredAuth();
+
+  async function resolveModelUrl() {
+    if (!modelFile) {
+      return form.modelUrl;
+    }
+
+    const payload = new FormData();
+    payload.set("model", modelFile);
+
+    setUploadStatus("uploading");
+    const response = await uploadArtifactModel(payload);
+    setUploadStatus("uploaded");
+
+    return response.modelUrl;
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -33,6 +50,8 @@ export default function NewArtifactPage() {
     setError("");
 
     try {
+      const modelUrl = await resolveModelUrl();
+
       await createArtifactRequest({
         slug: form.slug,
         name: form.name,
@@ -48,7 +67,7 @@ export default function NewArtifactPage() {
         shortDescription: form.shortDescription,
         description: form.description,
         imageUrl: form.imageUrl,
-        modelEmbedUrl: form.modelEmbedUrl,
+        modelUrl,
         gallery: form.gallery
           .split(",")
           .map((item) => item.trim())
@@ -61,7 +80,10 @@ export default function NewArtifactPage() {
 
       setMessage("Шинэ дурсгал амжилттай бүртгэгдлээ.");
       setForm(initialForm);
+      setModelFile(null);
+      setUploadStatus("idle");
     } catch (requestError) {
+      setUploadStatus("error");
       setError(requestError.message);
     }
   }
@@ -70,11 +92,10 @@ export default function NewArtifactPage() {
     <Layout>
       <section className="hero hero-compact">
         <div className="hero-copy">
-          <p className="eyebrow">Role-Based Access</p>
+          <p className="eyebrow">Шинэ Дурсгал</p>
           <h1>Судлаач эрхтэй хэрэглэгч шинэ дурсгал нэмнэ.</h1>
           <p className="hero-text">
-            Энэ хуудас нь зөвхөн нэвтэрсэн судлаач эсвэл админ хэрэглэгчийн API эрхээр
-            шинэ дурсгал бүртгэх туршилтын MVP хэлбэр юм.
+            Зураг, тайлбар, 3D файлаа оруулаад бүртгэнэ.
           </p>
         </div>
       </section>
@@ -137,11 +158,26 @@ export default function NewArtifactPage() {
             <input id="imageUrl" value={form.imageUrl} onChange={(e) => setForm((c) => ({ ...c, imageUrl: e.target.value }))} />
           </div>
           <div className="field">
-            <label htmlFor="modelEmbedUrl">3D model URL</label>
-            <input id="modelEmbedUrl" value={form.modelEmbedUrl} onChange={(e) => setForm((c) => ({ ...c, modelEmbedUrl: e.target.value }))} />
+            <label htmlFor="modelFile">3D файл upload</label>
+            <input
+              id="modelFile"
+              type="file"
+              accept=".glb,.gltf,model/gltf-binary,model/gltf+json"
+              onChange={(event) => setModelFile(event.target.files?.[0] || null)}
+            />
+            <p className="field-help">`.glb` эсвэл `.gltf` файл сонгоно.</p>
           </div>
           <div className="field">
-            <label htmlFor="gallery">Gallery URL-үүд</label>
+            <label htmlFor="modelUrl">Эсвэл бэлэн GLB / GLTF URL</label>
+            <input
+              id="modelUrl"
+              value={form.modelUrl}
+              onChange={(e) => setForm((c) => ({ ...c, modelUrl: e.target.value }))}
+              placeholder="https://.../artifact.glb"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="gallery">Gallery URL-ууд</label>
             <input id="gallery" value={form.gallery} onChange={(e) => setForm((c) => ({ ...c, gallery: e.target.value }))} placeholder="url1, url2" />
           </div>
           <div className="field">
@@ -149,6 +185,14 @@ export default function NewArtifactPage() {
             <input id="tags" value={form.tags} onChange={(e) => setForm((c) => ({ ...c, tags: e.target.value }))} placeholder="чулуу, дурсгал, өв" />
           </div>
         </div>
+
+        {modelFile && (
+          <div className="selected-files">
+            <span>{modelFile.name}</span>
+          </div>
+        )}
+
+        {uploadStatus === "uploading" && <p className="feedback">3D файл байршуулж байна...</p>}
 
         <div className="field">
           <label htmlFor="shortDescription">Товч тайлбар</label>
@@ -159,8 +203,12 @@ export default function NewArtifactPage() {
           <textarea id="description" rows="5" value={form.description} onChange={(e) => setForm((c) => ({ ...c, description: e.target.value }))} />
         </div>
 
-        <button type="submit" className="action-button" disabled={!auth?.user}>
-          Шинэ дурсгал бүртгэх
+        <button
+          type="submit"
+          className="action-button"
+          disabled={!auth?.user || uploadStatus === "uploading"}
+        >
+          {uploadStatus === "uploading" ? "Файл байршуулж байна..." : "Шинэ дурсгал бүртгэх"}
         </button>
       </form>
 
