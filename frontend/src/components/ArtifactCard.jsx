@@ -5,6 +5,7 @@ export default function ArtifactCard({ artifact }) {
     <article className="artifact-card">
       <div className="artifact-card-media">
         <img src={artifact.imageUrl} alt={artifact.name} className="artifact-card-image" />
+        <span className="artifact-card-badge">3D Ready</span>
         <div className="artifact-card-overlay">
           <span>{artifact.category}</span>
           <span>{artifact.period}</span>
@@ -27,7 +28,7 @@ export default function ArtifactCard({ artifact }) {
           ))}
         </div>
         <Link to={`/artifacts/${artifact.slug}`} className="primary-link">
-          Дэлгэрэнгүй үзэх
+          3D-ээр үзэх
         </Link>
       </div>
     </article>

@@ -98,16 +98,43 @@ export default function HomePage() {
 
       <section className="platform-strip" id="overview">
         <div>
-          <span className="platform-label">3D Үзүүлэн</span>
-          <strong>GLB / GLTF моделио шууд нээж үзнэ</strong>
+          <span className="platform-strip-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 2l8.5 4.9v10.2L12 22l-8.5-4.9V6.9L12 2z" />
+              <path d="M3.5 6.9L12 12l8.5-5.1" />
+              <path d="M12 12v10" />
+            </svg>
+          </span>
+          <div>
+            <span className="platform-label">3D Viewer</span>
+            <strong>Three.js + WebGL канваст GLB / GLTF загварыг шууд ачааллаж, эргүүлж үзэх боломж.</strong>
+          </div>
         </div>
-        <div>
-          <span className="platform-label">Каталог</span>
-          <strong>Олдворын мэдээллийг цэгцтэй харуулна</strong>
+        <div className="platform-strip-accent">
+          <span className="platform-strip-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z" />
+              <circle cx="12" cy="10" r="3" />
+            </svg>
+          </span>
+          <div>
+            <span className="platform-label">Газрын зураг</span>
+            <strong>Leaflet дээр олдворын газарзүйн байршлыг маркер ба popup-тайгаар илэрхийлнэ.</strong>
+          </div>
         </div>
-        <div>
-          <span className="platform-label">Удирдлага</span>
-          <strong>Шинэ дурсгал, файл нэмэх боломжтой</strong>
+        <div className="platform-strip-violet">
+          <span className="platform-strip-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M21 21l-4.3-4.3" />
+              <path d="M8 11h6" />
+              <path d="M11 8v6" />
+            </svg>
+          </span>
+          <div>
+            <span className="platform-label">Хайлт ба удирдлага</span>
+            <strong>Нэр, ангилал, үе, аймаг, тагаар хайх. Судлаачийн эрхээр шинэ дурсгал нэмэх.</strong>
+          </div>
         </div>
       </section>
 
@@ -133,8 +160,14 @@ export default function HomePage() {
       )}
       {status === "idle" && (
         <section className="empty-state search-empty-state">
-          <h2>Хайлт хийсний дараа олдворууд гарна.</h2>
-          <p>Хайх төрлөө сонгоод түлхүүр үг эсвэл шүүлт ашиглана уу.</p>
+          <div className="empty-state-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M21 21l-4.3-4.3" />
+            </svg>
+          </div>
+          <h2>Хайлт хийж 3D дурсгалуудыг нээгээрэй</h2>
+          <p>Нэр, ангилал, аймаг эсвэл тагаар хайлт хийгээд олдворын 3D загвар, зураг, газарзүйн байршлыг харна.</p>
         </section>
       )}
       {status === "loading" && <p className="feedback">Хайлтын үр дүнг ачаалж байна...</p>}

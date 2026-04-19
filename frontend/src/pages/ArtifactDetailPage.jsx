@@ -4,6 +4,16 @@ import { getArtifactBySlug } from "../api/client.js";
 import Layout from "../components/Layout.jsx";
 
 const ModelViewer = lazy(() => import("../components/ModelViewer.jsx"));
+const ArtifactMap = lazy(() => import("../components/ArtifactMap.jsx"));
+
+function MapFallback() {
+  return (
+    <div className="artifact-map-empty">
+      <strong>Газрын зураг</strong>
+      <span>Ачааллаж байна...</span>
+    </div>
+  );
+}
 
 function ViewerFallback() {
   return (
@@ -129,19 +139,36 @@ export default function ArtifactDetailPage() {
 
               <div className="detail-side-stack">
                 <div className="info-card info-card-compact">
-                  <h2>Бүртгэлийн хураангуй</h2>
+                  <p className="eyebrow">Бүртгэл</p>
+                  <h2>Хураангуй</h2>
                   <ul className="detail-list">
-                    <li>Өргөрөг: {artifact.coordinates.lat}</li>
-                    <li>Уртраг: {artifact.coordinates.lng}</li>
-                    <li>Төлөв: {artifact.status}</li>
-                    <li>Ангилал: {artifact.category}</li>
+                    <li><span>Өргөрөг</span><strong>{artifact.coordinates.lat}</strong></li>
+                    <li><span>Уртраг</span><strong>{artifact.coordinates.lng}</strong></li>
+                    <li><span>Төлөв</span><strong>{artifact.status}</strong></li>
+                    <li><span>Ангилал</span><strong>{artifact.category}</strong></li>
                   </ul>
                 </div>
 
-                <div className="info-card info-card-compact detail-spotlight">
-                  <p className="eyebrow">Товч Мэдээлэл</p>
-                  <h2>Үндсэн мэдээлэл</h2>
-                  <p>3D модель, зураг, байршил, ангиллыг нэг дэлгэц дээр харуулна.</p>
+                <div className="info-card info-card-compact">
+                  <div className="viewer-card-header">
+                    <div>
+                      <p className="eyebrow">Газрын зураг</p>
+                      <h2>Байршил</h2>
+                    </div>
+                    <div className="viewer-chip-row">
+                      <span className="viewer-chip">OSM</span>
+                      <span className="viewer-chip">Leaflet</span>
+                    </div>
+                  </div>
+                  <p>{artifact.province} — {artifact.location}</p>
+                  <Suspense fallback={<MapFallback />}>
+                    <ArtifactMap
+                      latitude={artifact.coordinates.lat}
+                      longitude={artifact.coordinates.lng}
+                      name={artifact.name}
+                      location={artifact.location}
+                    />
+                  </Suspense>
                 </div>
               </div>
             </section>

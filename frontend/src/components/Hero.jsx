@@ -14,8 +14,8 @@ export default function Hero() {
     const y = (event.clientY - bounds.top) / bounds.height;
 
     setMotion({
-      rotateX: Number(((0.5 - y) * 16).toFixed(2)),
-      rotateY: Number(((x - 0.5) * 20).toFixed(2))
+      rotateX: Number(((0.5 - y) * 14).toFixed(2)),
+      rotateY: Number(((x - 0.5) * 18).toFixed(2))
     });
   }
 
@@ -26,29 +26,34 @@ export default function Hero() {
   return (
     <section className="hero">
       <div className="hero-copy">
-        <p className="eyebrow">3D Өвийн Сан</p>
-        <h1>Монголын түүхэн өвийг 3D орчинд үзэх веб платформ.</h1>
+        <p className="eyebrow">3D · WebGL · Heritage</p>
+        <h1>Монголын түүхэн өвийг 3D орчинд амьдруулна.</h1>
         <p className="hero-text">
-          Дурсгалын мэдээлэл, зураг, 3D моделио нэг дороос үзэж, хайж, удирдана.
+          Эргүүлж үзэх 3D загвар, газарзүйн байршил болон ухаалаг хайлтыг нэг
+          дэлгэц дээр нэгтгэсэн интерактив веб платформ.
         </p>
 
         <div className="hero-actions">
           <a href="#catalog" className="action-button">
-            Каталог руу орох
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M21 21l-4.3-4.3" />
+            </svg>
+            Дурсгал хайх
           </a>
-          <a href="#overview" className="secondary-link hero-link">
+          <a href="#overview" className="secondary-button hero-link">
             Платформын тойм
           </a>
         </div>
 
         <div className="hero-signal-row">
           <div className="hero-signal">
-            <span>Үндсэн хэсэг</span>
-            <strong>Каталог ба 3D үзүүлэн</strong>
+            <span>Viewer</span>
+            <strong>Three.js WebGL канваст GLB / GLTF загвар</strong>
           </div>
           <div className="hero-signal">
-            <span>Зорилго</span>
-            <strong>Ойлгомжтой, цэвэр, орчин үеийн интерфэйс</strong>
+            <span>Байршил</span>
+            <strong>Leaflet газрын зураг · олдворын координат</strong>
           </div>
         </div>
       </div>
@@ -84,14 +89,14 @@ export default function Hero() {
 
             <div className="hero-floating-card hero-floating-card-one">
               <span>3D Viewer</span>
-              <strong>Эргүүлж үзэх</strong>
+              <strong>Орбит, томруулах</strong>
             </div>
             <div className="hero-floating-card hero-floating-card-two">
               <span>Каталог</span>
-              <strong>Дурсгалын мэдээлэл</strong>
+              <strong>Олдворын мэдээлэл</strong>
             </div>
             <div className="hero-floating-card hero-floating-card-three">
-              <span>Файл</span>
+              <span>Формат</span>
               <strong>GLB / GLTF</strong>
             </div>
           </div>
@@ -99,16 +104,16 @@ export default function Hero() {
 
         <div className="hero-stat-grid">
           <div className="stat-card">
-            <span>Харах</span>
-            <strong>3D моделио шууд үзэх</strong>
+            <span>01 — Explore</span>
+            <strong>3D моделио эргүүлж, томруулж харах</strong>
           </div>
           <div className="stat-card">
-            <span>Хайх</span>
-            <strong>Ангилал, аймаг, нэрээр шүүх</strong>
+            <span>02 — Search</span>
+            <strong>Нэр, үе, аймаг, түлхүүр үгээр хайх</strong>
           </div>
           <div className="stat-card">
-            <span>Нэмэх</span>
-            <strong>Шинэ дурсгал, 3D файл бүртгэх</strong>
+            <span>03 — Contribute</span>
+            <strong>Судлаачийн эрхээр шинэ дурсгал нэмэх</strong>
           </div>
         </div>
       </div>
