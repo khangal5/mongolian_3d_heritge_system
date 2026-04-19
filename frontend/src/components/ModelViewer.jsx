@@ -7,12 +7,14 @@ import {
   CylinderGeometry,
   DirectionalLight,
   Group,
+  IcosahedronGeometry,
   MathUtils,
   Mesh,
   MeshStandardMaterial,
   PerspectiveCamera,
   Scene,
   SRGBColorSpace,
+  TorusKnotGeometry,
   Vector3,
   WebGLRenderer
 } from "three";
@@ -51,6 +53,36 @@ function disposeMaterial(material) {
   material?.dispose?.();
 }
 
+function buildFallbackArtifact(root) {
+  const group = new Group();
+
+  const body = new Mesh(
+    new IcosahedronGeometry(0.85, 0),
+    new MeshStandardMaterial({
+      color: "#c9a46b",
+      metalness: 0.35,
+      roughness: 0.45,
+      flatShading: true
+    })
+  );
+  body.position.y = 0.9;
+
+  const ornament = new Mesh(
+    new TorusKnotGeometry(0.38, 0.11, 140, 20),
+    new MeshStandardMaterial({
+      color: "#73d7ff",
+      metalness: 0.65,
+      roughness: 0.25
+    })
+  );
+  ornament.position.y = 0.9;
+
+  group.add(body, ornament);
+  root.add(group);
+
+  return group;
+}
+
 export default function ModelViewer({ modelUrl, title }) {
   const mountRef = useRef(null);
   const [status, setStatus] = useState("idle");
@@ -58,23 +90,13 @@ export default function ModelViewer({ modelUrl, title }) {
 
   useEffect(() => {
     const mount = mountRef.current;
-    const format = inferModelFormat(modelUrl);
 
     if (!mount) {
       return undefined;
     }
 
-    if (!modelUrl) {
-      setStatus("empty");
-      setMessage("3D model URL оруулаагүй байна.");
-      return undefined;
-    }
-
-    if (!format) {
-      setStatus("unsupported");
-      setMessage("Зөвхөн .glb эсвэл .gltf файл Three.js viewer дээр ажиллана.");
-      return undefined;
-    }
+    const format = inferModelFormat(modelUrl);
+    const usingFallback = !format;
 
     let animationFrameId = 0;
     let disposed = false;
@@ -133,47 +155,60 @@ export default function ModelViewer({ modelUrl, title }) {
 
     resizeRenderer();
 
-    const loader = new GLTFLoader();
-    loader.load(
-      modelUrl,
-      (gltf) => {
-        if (disposed) {
-          return;
+    if (usingFallback) {
+      buildFallbackArtifact(root);
+      const distance = 3.4;
+      camera.position.set(distance * 0.82, distance * 0.55, distance);
+      controls.target.set(0, 0.9, 0);
+      controls.update();
+
+      setStatus("ready");
+      setMessage(
+        `${title || "3D model"} — Three.js WebGL procedural жишиг загвараар харуулж байна.`
+      );
+    } else {
+      const loader = new GLTFLoader();
+      loader.load(
+        modelUrl,
+        (gltf) => {
+          if (disposed) {
+            return;
+          }
+
+          root.add(gltf.scene);
+
+          const bounds = new Box3().setFromObject(gltf.scene);
+          const size = bounds.getSize(new Vector3());
+          const center = bounds.getCenter(new Vector3());
+          const maxAxis = Math.max(size.x, size.y, size.z) || 1;
+
+          gltf.scene.position.sub(center);
+          gltf.scene.position.y -= bounds.min.y;
+          gltf.scene.position.y -= size.y * 0.5;
+
+          const distance = Math.max(maxAxis * 2.1, 2.6);
+          camera.position.set(distance * 0.82, distance * 0.55, distance);
+          controls.target.set(0, Math.max(size.y * 0.12, 0), 0);
+          controls.update();
+
+          const scale = 1 / Math.max(maxAxis / 1.8, 1);
+          const clampedScale = MathUtils.clamp(scale, 0.6, 2.2);
+          gltf.scene.scale.setScalar(clampedScale);
+
+          setStatus("ready");
+          setMessage(`${title || "3D model"} Three.js WebGL viewer дээр амжилттай ачааллаа.`);
+        },
+        undefined,
+        (error) => {
+          if (disposed) {
+            return;
+          }
+
+          setStatus("error");
+          setMessage(error.message || "3D model ачааллах үед алдаа гарлаа.");
         }
-
-        root.add(gltf.scene);
-
-        const bounds = new Box3().setFromObject(gltf.scene);
-        const size = bounds.getSize(new Vector3());
-        const center = bounds.getCenter(new Vector3());
-        const maxAxis = Math.max(size.x, size.y, size.z) || 1;
-
-        gltf.scene.position.sub(center);
-        gltf.scene.position.y -= bounds.min.y;
-        gltf.scene.position.y -= size.y * 0.5;
-
-        const distance = Math.max(maxAxis * 2.1, 2.6);
-        camera.position.set(distance * 0.82, distance * 0.55, distance);
-        controls.target.set(0, Math.max(size.y * 0.12, 0), 0);
-        controls.update();
-
-        const scale = 1 / Math.max(maxAxis / 1.8, 1);
-        const clampedScale = MathUtils.clamp(scale, 0.6, 2.2);
-        gltf.scene.scale.setScalar(clampedScale);
-
-        setStatus("ready");
-        setMessage(`${title || "3D model"} WebGL viewer дээр амжилттай ачааллаа.`);
-      },
-      undefined,
-      (error) => {
-        if (disposed) {
-          return;
-        }
-
-        setStatus("error");
-        setMessage(error.message || "3D model ачааллах үед алдаа гарлаа.");
-      }
-    );
+      );
+    }
 
     function render() {
       controls.update();
