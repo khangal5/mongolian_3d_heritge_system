@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { registerResearcher } from "../api/client.js";
-import Layout from "../components/Layout.jsx";
+import AuthLayout from "../components/AuthLayout.jsx";
 import { validateCyrillicName } from "../utils/validators.js";
 
 const initialRegister = {
@@ -27,6 +27,7 @@ export default function RegisterPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [touched, setTouched] = useState({});
+  const [busy, setBusy] = useState(false);
 
   const passwordMismatch = useMemo(
     () =>
@@ -70,22 +71,20 @@ export default function RegisterPage() {
       setError(nameError);
       return;
     }
-
     if (registerForm.password.length < 8) {
       setError("Нууц үг хамгийн багадаа 8 тэмдэгт байна.");
       return;
     }
-
     if (passwordMismatch) {
       setError("Нууц үг давтан оруулсан утгатай таарахгүй байна.");
       return;
     }
-
     if (!proofImage) {
       setError("Байгууллагын үнэмлэх эсвэл баталгаажуулах зураг шаардлагатай.");
       return;
     }
 
+    setBusy(true);
     const payload = new FormData();
     Object.entries(registerForm).forEach(([key, value]) => {
       if (key !== "confirmPassword") {
@@ -102,170 +101,131 @@ export default function RegisterPage() {
       setTouched({});
     } catch (requestError) {
       setError(requestError.message);
+    } finally {
+      setBusy(false);
     }
   }
 
+  const sideBullets = (
+    <ul className="auth-bullets">
+      <li>Зөвхөн албан имэйл (<code>.edu.mn</code>, <code>.ac.mn</code>, <code>.gov.mn</code>).</li>
+      <li>Овог нэрийг кирилл үсгээр бичнэ.</li>
+      <li>Бүртгэл үүссэний дараа имэйл рүү баталгаажуулах холбоос явагдана.</li>
+      <li>Админ хавсаргасан баримтыг шалгаж эрх олгоно.</li>
+    </ul>
+  );
+
   return (
-    <Layout>
-      <section className="auth-shell auth-shell-wide">
-        <section className="auth-side">
-          <p className="eyebrow">Бүртгүүлэх</p>
-          <h1>Шинэ хэрэглэгчийн бүртгэл үүсгэнэ.</h1>
-          <p className="hero-text">
-            Үндсэн мэдээллээ оруулаад баталгаажуулах файлаа хавсаргана.
-          </p>
-          <div className="auth-note-list">
-            <p>
-              <span className="required-mark">*</span> тэмдэгтэй талбарууд заавал
-              бөглөх ёстой.
-            </p>
-            <p>Овог нэрийг кирилл (монгол) үсгээр бичнэ.</p>
-            <p>
-              Зөвхөн албан имэйл хүлээн зөвшөөрнө (жишээ:{" "}
-              <code>@must.edu.mn</code>, <code>@num.edu.mn</code>,{" "}
-              <code>@mas.ac.mn</code>).
-            </p>
-            <p>Бүртгэл үүсэхэд имэйл рүү баталгаажуулах холбоос явагдана.</p>
-          </div>
-          <Link to="/login" className="secondary-link">
-            Бүртгэлтэй хэрэглэгч нэвтрэх
-          </Link>
-        </section>
+    <AuthLayout
+      title="Шинэ хэрэглэгчийн бүртгэл"
+      subtitle="Судлаачийн эрхтэй хэрэглэгч болохын тулд мэдээллээ бөглөнө үү."
+      side={sideBullets}
+    >
+      <form className="auth-form auth-form-wide" onSubmit={handleRegister} noValidate>
+        <div className="auth-form-header">
+          <h2>Бүртгүүлэх</h2>
+          <p><RequiredMark /> тэмдэгтэй талбарууд заавал бөглөх ёстой.</p>
+        </div>
 
-        <form className="auth-card auth-card-wide" onSubmit={handleRegister} noValidate>
-          <div className="auth-card-header">
-            <h2>Шинэ хэрэглэгч бүртгэх</h2>
-            <p>Мэдээллээ бөглөөд бүртгэл үүсгэнэ.</p>
-          </div>
-
-          <div className="form-grid">
-            <div className="field">
-              <label htmlFor="fullName">
-                Овог нэр <RequiredMark />
-              </label>
-              <input
-                id="fullName"
-                value={registerForm.fullName}
-                onChange={(e) => handleField("fullName", e.target.value)}
-                onBlur={() => markTouched("fullName")}
-                placeholder="Н.Хангал"
-                aria-invalid={Boolean(fullNameError)}
-                aria-describedby={fullNameError ? "fullName-error" : undefined}
-                required
-              />
-              {fullNameError && (
-                <p className="field-error" id="fullName-error">{fullNameError}</p>
-              )}
-            </div>
-            <div className="field">
-              <label htmlFor="email">
-                Албан имэйл <RequiredMark />
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={registerForm.email}
-                onChange={(e) => handleField("email", e.target.value)}
-                onBlur={() => markTouched("email")}
-                placeholder="khangal@must.edu.mn"
-                required
-              />
-              <p className="field-help">
-                Нэвтрэх ба баталгаажуулах имэйл. Зөвхөн @*.edu.mn / *.ac.mn / *.gov.mn.
-              </p>
-            </div>
-            <div className="field">
-              <label htmlFor="organization">
-                Байгууллага <RequiredMark />
-              </label>
-              <input
-                id="organization"
-                value={registerForm.organization}
-                onChange={(e) => handleField("organization", e.target.value)}
-                onBlur={() => markTouched("organization")}
-                placeholder="ШУТИС - МХТС"
-                required
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="departmentName">Хэлтэс / лаборатори</label>
-              <input
-                id="departmentName"
-                value={registerForm.departmentName}
-                onChange={(e) => handleField("departmentName", e.target.value)}
-                placeholder="Компьютерын ухааны тэнхим"
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="positionTitle">
-                Албан тушаал <RequiredMark />
-              </label>
-              <input
-                id="positionTitle"
-                value={registerForm.positionTitle}
-                onChange={(e) => handleField("positionTitle", e.target.value)}
-                onBlur={() => markTouched("positionTitle")}
-                placeholder="Эрдэм шинжилгээний ажилтан"
-                required
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="phoneNumber">Утасны дугаар</label>
-              <input
-                id="phoneNumber"
-                value={registerForm.phoneNumber}
-                onChange={(e) => handleField("phoneNumber", e.target.value)}
-                placeholder="99112233"
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="employeeCode">Ажилтны код / үнэмлэх №</label>
-              <input
-                id="employeeCode"
-                value={registerForm.employeeCode}
-                onChange={(e) => handleField("employeeCode", e.target.value)}
-                placeholder="D071405-001"
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="password">
-                Нууц үг <RequiredMark />
-              </label>
-              <input
-                id="password"
-                type="password"
-                value={registerForm.password}
-                onChange={(e) => handleField("password", e.target.value)}
-                onBlur={() => markTouched("password")}
-                placeholder="Хамгийн багадаа 8 тэмдэгт"
-                minLength={8}
-                required
-              />
-              {passwordTooShort && (
-                <p className="field-error">Нууц үг 8-аас доош тэмдэгт байж болохгүй</p>
-              )}
-            </div>
-            <div className="field">
-              <label htmlFor="confirmPassword">
-                Нууц үг давтах <RequiredMark />
-              </label>
-              <input
-                id="confirmPassword"
-                type="password"
-                value={registerForm.confirmPassword}
-                onChange={(e) => handleField("confirmPassword", e.target.value)}
-                onBlur={() => markTouched("confirmPassword")}
-                placeholder="Дээрх нууц үгээ давтан оруулна уу"
-                required
-              />
-            </div>
+        <div className="auth-form-grid">
+          <div className="field">
+            <label htmlFor="fullName">
+              Овог нэр <RequiredMark />
+            </label>
+            <input
+              id="fullName"
+              value={registerForm.fullName}
+              onChange={(e) => handleField("fullName", e.target.value)}
+              onBlur={() => markTouched("fullName")}
+              placeholder="Н.Хангал"
+              aria-invalid={Boolean(fullNameError)}
+              aria-describedby={fullNameError ? "fullName-error" : undefined}
+              required
+            />
+            {fullNameError && (
+              <p className="field-error" id="fullName-error">{fullNameError}</p>
+            )}
           </div>
 
           <div className="field">
+            <label htmlFor="email">
+              Албан имэйл <RequiredMark />
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={registerForm.email}
+              onChange={(e) => handleField("email", e.target.value)}
+              onBlur={() => markTouched("email")}
+              placeholder="khangal@must.edu.mn"
+              required
+              autoComplete="email"
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="organization">
+              Байгууллага <RequiredMark />
+            </label>
+            <input
+              id="organization"
+              value={registerForm.organization}
+              onChange={(e) => handleField("organization", e.target.value)}
+              onBlur={() => markTouched("organization")}
+              placeholder="ШУТИС - МХТС"
+              required
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="departmentName">Хэлтэс / тэнхим</label>
+            <input
+              id="departmentName"
+              value={registerForm.departmentName}
+              onChange={(e) => handleField("departmentName", e.target.value)}
+              placeholder="Компьютерын ухааны тэнхим"
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="positionTitle">
+              Албан тушаал <RequiredMark />
+            </label>
+            <input
+              id="positionTitle"
+              value={registerForm.positionTitle}
+              onChange={(e) => handleField("positionTitle", e.target.value)}
+              onBlur={() => markTouched("positionTitle")}
+              placeholder="Эрдэм шинжилгээний ажилтан"
+              required
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="phoneNumber">Утасны дугаар</label>
+            <input
+              id="phoneNumber"
+              value={registerForm.phoneNumber}
+              onChange={(e) => handleField("phoneNumber", e.target.value)}
+              placeholder="99112233"
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="employeeCode">Ажилтны код / үнэмлэх №</label>
+            <input
+              id="employeeCode"
+              value={registerForm.employeeCode}
+              onChange={(e) => handleField("employeeCode", e.target.value)}
+              placeholder="D071405-001"
+            />
+          </div>
+
+          <div className="field auth-form-grid-full">
             <label htmlFor="researchFocus">Судалгааны чиглэл</label>
             <textarea
               id="researchFocus"
-              rows="4"
+              rows="3"
               value={registerForm.researchFocus}
               onChange={(e) => handleField("researchFocus", e.target.value)}
               placeholder="Археологи, хадны зураг, чулуун бичээс, 3D баримтжуулалт..."
@@ -273,6 +233,45 @@ export default function RegisterPage() {
           </div>
 
           <div className="field">
+            <label htmlFor="password">
+              Нууц үг <RequiredMark />
+            </label>
+            <input
+              id="password"
+              type="password"
+              value={registerForm.password}
+              onChange={(e) => handleField("password", e.target.value)}
+              onBlur={() => markTouched("password")}
+              placeholder="Хамгийн багадаа 8 тэмдэгт"
+              minLength={8}
+              required
+              autoComplete="new-password"
+            />
+            {passwordTooShort && (
+              <p className="field-error">Нууц үг 8-аас доош тэмдэгт байж болохгүй</p>
+            )}
+          </div>
+
+          <div className="field">
+            <label htmlFor="confirmPassword">
+              Нууц үг давтах <RequiredMark />
+            </label>
+            <input
+              id="confirmPassword"
+              type="password"
+              value={registerForm.confirmPassword}
+              onChange={(e) => handleField("confirmPassword", e.target.value)}
+              onBlur={() => markTouched("confirmPassword")}
+              placeholder="Дээрх нууц үгийг давтан оруулна уу"
+              required
+              autoComplete="new-password"
+            />
+            {passwordMismatch && (
+              <p className="field-error">Нууц үг таарахгүй байна.</p>
+            )}
+          </div>
+
+          <div className="field auth-form-grid-full">
             <label htmlFor="proofImage">
               Баталгаажуулах зураг <RequiredMark />
             </label>
@@ -286,29 +285,27 @@ export default function RegisterPage() {
             <p className="field-help">
               Байгууллагын үнэмлэх эсвэл албан тушаалыг гэрчлэх PDF/зураг.
             </p>
+            {proofImage && (
+              <div className="selected-file-pill">{proofImage.name}</div>
+            )}
           </div>
+        </div>
 
-          {passwordMismatch && (
-            <p className="field-error">Нууц үг давтан оруулсан утгатай таарахгүй байна.</p>
-          )}
-          {proofImage && (
-            <div className="selected-files">
-              <span>{proofImage.name}</span>
-            </div>
-          )}
+        <button
+          type="submit"
+          className="auth-submit"
+          disabled={busy || passwordMismatch || Boolean(fullNameError) || passwordTooShort}
+        >
+          {busy ? "Илгээж байна..." : "Бүртгэл үүсгэх"}
+        </button>
 
-          <button
-            type="submit"
-            className="action-button"
-            disabled={passwordMismatch || Boolean(fullNameError) || passwordTooShort}
-          >
-            Бүртгэл үүсгэх
-          </button>
+        {message && <p className="feedback">{message}</p>}
+        {error && <p className="feedback error">{error}</p>}
 
-          {message && <p className="feedback">{message}</p>}
-          {error && <p className="feedback error">{error}</p>}
-        </form>
-      </section>
-    </Layout>
+        <p className="auth-form-footer">
+          Бүртгэлтэй юу? <Link to="/login">Нэвтрэх</Link>
+        </p>
+      </form>
+    </AuthLayout>
   );
 }

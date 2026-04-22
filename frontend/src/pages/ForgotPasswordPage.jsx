@@ -33,59 +33,50 @@ export default function ForgotPasswordPage() {
 
   return (
     <Layout>
-      <section className="auth-shell">
-        <section className="auth-side">
-          <p className="eyebrow">Нууц үг сэргээх</p>
-          <h1>Нууц үгээ мартсан уу?</h1>
-          <p className="hero-text">
-            Бүртгэлтэй имэйлээ оруулна уу. Бид нууц үг сэргээх холбоосыг тань руу илгээнэ.
-          </p>
-          <Link to="/login" className="secondary-link">
-            Нэвтрэх хуудас руу буцах
-          </Link>
-        </section>
+      <section className="auth-utility-shell">
+        <div className="auth-utility-card">
+          <header className="auth-utility-header">
+            <span className="auth-side-mark">◆</span>
+            <h1>Нууц үгээ мартсан уу?</h1>
+            <p>Бүртгэлтэй имэйлээ оруулна уу. Бид нэг удаагийн сэргээх холбоосыг тань руу илгээнэ.</p>
+          </header>
 
-        <form className="auth-card" onSubmit={handleSubmit}>
-          <div className="auth-card-header">
-            <h2>Сэргээх холбоос авах</h2>
-            <p>Бүртгэлтэй имэйлээ оруулна.</p>
-          </div>
+          <form className="auth-form" onSubmit={handleSubmit}>
+            <div className="field">
+              <label htmlFor="forgotEmail">Имэйл</label>
+              <input
+                id="forgotEmail"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="researcher@must.edu.mn"
+                required
+                autoComplete="email"
+              />
+            </div>
 
-          <div className="field">
-            <label htmlFor="forgotEmail">Имэйл</label>
-            <input
-              id="forgotEmail"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="researcher@example.mn"
-              required
-            />
-          </div>
+            <button type="submit" className="auth-submit" disabled={submitting}>
+              {submitting ? "Илгээж байна..." : "Сэргээх холбоос илгээх"}
+            </button>
 
-          <button type="submit" className="action-button" disabled={submitting}>
-            {submitting ? "Илгээж байна..." : "Сэргээх холбоос илгээх"}
-          </button>
+            {message && <p className="feedback">{message}</p>}
+            {devLink && (
+              <p className="feedback">
+                Dev линк: <a href={devLink} target="_blank" rel="noreferrer">{devLink}</a>
+              </p>
+            )}
+            {previewUrl && (
+              <p className="feedback">
+                Имэйл preview: <a href={previewUrl} target="_blank" rel="noreferrer">{previewUrl}</a>
+              </p>
+            )}
+            {error && <p className="feedback error">{error}</p>}
 
-          {message && <p className="feedback">{message}</p>}
-          {devLink && (
-            <p className="feedback">
-              Dev линк:{" "}
-              <a href={devLink} target="_blank" rel="noreferrer">
-                {devLink}
-              </a>
+            <p className="auth-form-footer">
+              <Link to="/login">← Нэвтрэх хуудас руу буцах</Link>
             </p>
-          )}
-          {previewUrl && (
-            <p className="feedback">
-              Имэйл preview:{" "}
-              <a href={previewUrl} target="_blank" rel="noreferrer">
-                {previewUrl}
-              </a>
-            </p>
-          )}
-          {error && <p className="feedback error">{error}</p>}
-        </form>
+          </form>
+        </div>
       </section>
     </Layout>
   );

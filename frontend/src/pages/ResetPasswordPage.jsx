@@ -23,12 +23,10 @@ export default function ResetPasswordPage() {
       setError("Холбоос буруу байна. Имэйлээс ирсэн линкээр нэвтэрнэ үү.");
       return;
     }
-
     if (password.length < 8) {
       setError("Шинэ нууц үг хамгийн багадаа 8 тэмдэгт байна");
       return;
     }
-
     if (password !== confirmPassword) {
       setError("Нууц үг таарахгүй байна");
       return;
@@ -48,56 +46,54 @@ export default function ResetPasswordPage() {
 
   return (
     <Layout>
-      <section className="auth-shell">
-        <section className="auth-side">
-          <p className="eyebrow">Шинэ нууц үг</p>
-          <h1>Нууц үгээ шинэчлэх</h1>
-          <p className="hero-text">
-            Шинэ нууц үгээ оруулна уу. Хуучин бүх төхөөрөмжөөс автоматаар гарна.
-          </p>
-          <Link to="/login" className="secondary-link">
-            Нэвтрэх хуудас руу буцах
-          </Link>
-        </section>
+      <section className="auth-utility-shell">
+        <div className="auth-utility-card">
+          <header className="auth-utility-header">
+            <span className="auth-side-mark">◆</span>
+            <h1>Шинэ нууц үг тохируулах</h1>
+            <p>Шинэ нууц үгээ оруулна уу. Идэвхтэй бүх session устгагдаж, та шинээр нэвтрэх шаардлагатай болно.</p>
+          </header>
 
-        <form className="auth-card" onSubmit={handleSubmit}>
-          <div className="auth-card-header">
-            <h2>Шинэ нууц үг</h2>
-            <p>Хамгийн багадаа 8 тэмдэгт байна.</p>
-          </div>
+          <form className="auth-form" onSubmit={handleSubmit}>
+            <div className="field">
+              <label htmlFor="newPassword">Шинэ нууц үг</label>
+              <input
+                id="newPassword"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Хамгийн багадаа 8 тэмдэгт"
+                autoComplete="new-password"
+                required
+                minLength={8}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="confirmPassword">Нууц үг давтах</label>
+              <input
+                id="confirmPassword"
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                placeholder="Дээрх нууц үгээ давтан оруулна уу"
+                autoComplete="new-password"
+                required
+                minLength={8}
+              />
+            </div>
 
-          <div className="field">
-            <label htmlFor="newPassword">Шинэ нууц үг</label>
-            <input
-              id="newPassword"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete="new-password"
-              required
-              minLength={8}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="confirmPassword">Нууц үг давтах</label>
-            <input
-              id="confirmPassword"
-              type="password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              autoComplete="new-password"
-              required
-              minLength={8}
-            />
-          </div>
+            <button type="submit" className="auth-submit" disabled={submitting || !token}>
+              {submitting ? "Хадгалж байна..." : "Нууц үг шинэчлэх"}
+            </button>
 
-          <button type="submit" className="action-button" disabled={submitting || !token}>
-            {submitting ? "Хадгалж байна..." : "Нууц үг шинэчлэх"}
-          </button>
+            {message && <p className="feedback">{message}</p>}
+            {error && <p className="feedback error">{error}</p>}
 
-          {message && <p className="feedback">{message}</p>}
-          {error && <p className="feedback error">{error}</p>}
-        </form>
+            <p className="auth-form-footer">
+              <Link to="/login">← Нэвтрэх хуудас руу буцах</Link>
+            </p>
+          </form>
+        </div>
       </section>
     </Layout>
   );

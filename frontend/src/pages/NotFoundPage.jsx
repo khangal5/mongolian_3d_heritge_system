@@ -4,17 +4,17 @@ import Layout from "../components/Layout.jsx";
 export default function NotFoundPage() {
   return (
     <Layout>
-      <section className="auth-shell">
-        <section className="auth-side">
-          <p className="eyebrow">404</p>
+      <section className="auth-utility-shell">
+        <div className="auth-utility-card auth-utility-card-narrow notfound-card">
+          <div className="notfound-code">404</div>
           <h1>Хуудас олдсонгүй</h1>
-          <p className="hero-text">
+          <p>
             Таны хайсан хуудас байхгүй эсвэл шилжсэн байна. Каталог руу буцаж олдвор сонгох эсвэл нүүр хуудас руу буцна уу.
           </p>
-          <Link to="/" className="secondary-link">
-            Нүүр хуудас руу буцах
+          <Link to="/" className="auth-submit" style={{ display: "inline-block", textDecoration: "none" }}>
+            Нүүр хуудас руу
           </Link>
-        </section>
+        </div>
       </section>
     </Layout>
   );

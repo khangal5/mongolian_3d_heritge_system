@@ -52,59 +52,45 @@ export default function VerifyEmailPage() {
 
   return (
     <Layout>
-      <section className="auth-shell">
-        <section className="auth-card auth-card-narrow">
-          <div className="auth-card-header">
-            <p className="eyebrow">Имэйл баталгаажуулалт</p>
-            <h2>
+      <section className="auth-utility-shell">
+        <div className="auth-utility-card auth-utility-card-narrow">
+          <header className="auth-utility-header">
+            <span className={`auth-utility-icon ${status === "success" ? "ok" : status === "error" ? "fail" : ""}`}>
+              {status === "success" ? "✓" : status === "error" ? "✕" : "✉"}
+            </span>
+            <h1>
               {status === "loading" && "Шалгаж байна..."}
-              {status === "success" && "Амжилттай баталгаажлаа"}
+              {status === "success" && "Имэйл баталгаажлаа"}
               {status === "error" && "Баталгаажуулж чадсангүй"}
-            </h2>
+              {status === "idle" && "Имэйл баталгаажуулалт"}
+            </h1>
+            {message && <p>{message}</p>}
+          </header>
+
+          <div className="auth-form">
+            {status === "loading" && (
+              <p className="feedback">Таны баталгаажуулах холбоосыг шалгаж байна...</p>
+            )}
+            {status === "success" && (
+              <Link
+                to={isAuthed ? "/dashboard" : "/login"}
+                className="auth-submit"
+                style={{ display: "block", textAlign: "center", textDecoration: "none" }}
+              >
+                {isAuthed ? "Самбар руу шилжих" : "Нэвтрэх хуудас руу"}
+              </Link>
+            )}
+            {status === "error" && (
+              <Link
+                to={isAuthed ? "/dashboard" : "/login"}
+                className="auth-submit"
+                style={{ display: "block", textAlign: "center", textDecoration: "none" }}
+              >
+                {isAuthed ? "Самбар руу буцах" : "Нэвтрэх хуудас руу"}
+              </Link>
+            )}
           </div>
-
-          {status === "loading" && (
-            <p className="feedback">Таны баталгаажуулах холбоосыг шалгаж байна...</p>
-          )}
-
-          {status === "success" && (
-            <>
-              <p className="feedback">{message}</p>
-              {isAuthed ? (
-                <Link
-                  to="/dashboard"
-                  className="action-button"
-                  style={{ display: "inline-flex" }}
-                >
-                  Самбар руу
-                </Link>
-              ) : (
-                <Link
-                  to="/login"
-                  className="action-button"
-                  style={{ display: "inline-flex" }}
-                >
-                  Нэвтрэх хуудас руу
-                </Link>
-              )}
-            </>
-          )}
-
-          {status === "error" && (
-            <>
-              <p className="feedback error">{message}</p>
-              {isAuthed ? (
-                <Link to="/dashboard" className="ghost-button">
-                  Самбар руу
-                </Link>
-              ) : (
-                <Link to="/login" className="ghost-button">
-                  Нэвтрэх хуудас руу
-                </Link>
-              )}
-            </>
-          )}
-        </section>
+        </div>
       </section>
     </Layout>
   );
