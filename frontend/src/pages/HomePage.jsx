@@ -1,226 +1,179 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { getArtifacts } from "../api/client.js";
-import ArtifactGrid from "../components/ArtifactGrid.jsx";
-import Hero from "../components/Hero.jsx";
+import ArtifactCard from "../components/ArtifactCard.jsx";
 import Layout from "../components/Layout.jsx";
-import SearchPanel from "../components/SearchPanel.jsx";
 
-const defaultFilters = {
-  names: [],
-  categories: [],
-  periods: [],
-  provinces: [],
-  locations: [],
-  tags: []
-};
+const HIGHLIGHT_CATEGORIES = [
+  { label: "Хадны зураг", description: "Нүүдэлчдийн уламжлал, ан, амьдралын дүр зураг", tone: "ochre" },
+  { label: "Чулуун хөшөө", description: "Буган чулуу, хүн чулуу, нүүдлийн соёл", tone: "indigo" },
+  { label: "Чулуун бичээс", description: "Эртний түрэг, рунийн бичгийн дурсгал", tone: "moss" },
+  { label: "Булш бунхан", description: "Хиргисүүр, дөрвөлжин булш, керексүүр", tone: "rose" }
+];
 
 export default function HomePage() {
-  const [query, setQuery] = useState("");
-  const [searchBy, setSearchBy] = useState("all");
-  const [category, setCategory] = useState("");
-  const [province, setProvince] = useState("");
-  const [sortByDistance, setSortByDistance] = useState(false);
-  const [userLocation, setUserLocation] = useState(null);
-  const [geolocationStatus, setGeolocationStatus] = useState("idle");
   const [artifacts, setArtifacts] = useState([]);
-  const [filters, setFilters] = useState(defaultFilters);
-  const [status, setStatus] = useState("idle");
-  const [filtersStatus, setFiltersStatus] = useState("loading");
-  const [appliedSearch, setAppliedSearch] = useState(null);
-
-  function handleSortByDistanceChange(checked) {
-    setSortByDistance(checked);
-
-    if (!checked) {
-      setUserLocation(null);
-      setGeolocationStatus("idle");
-      return;
-    }
-
-    if (!navigator.geolocation) {
-      setGeolocationStatus("error");
-      return;
-    }
-
-    setGeolocationStatus("loading");
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setUserLocation({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude
-        });
-        setGeolocationStatus("ready");
-      },
-      () => {
-        setGeolocationStatus("error");
-        setSortByDistance(false);
-      }
-    );
-  }
+  const [filters, setFilters] = useState({ categories: [], provinces: [], periods: [] });
+  const [status, setStatus] = useState("loading");
 
   useEffect(() => {
     let ignore = false;
-
-    getArtifacts({ includeItems: false })
-      .then((data) => {
-        if (ignore) {
-          return;
-        }
-
-        setFilters(data.filters);
-        setFiltersStatus("success");
-      })
-      .catch(() => {
-        if (!ignore) {
-          setFiltersStatus("error");
-        }
-      });
-
-    return () => {
-      ignore = true;
-    };
-  }, []);
-
-  function handleSearch() {
-    const nextSearch = {
-      q: query.trim(),
-      searchBy,
-      category,
-      province
-    };
-
-    if (sortByDistance && userLocation) {
-      nextSearch.userLat = userLocation.lat;
-      nextSearch.userLng = userLocation.lng;
-    }
-
-    if (!nextSearch.q && !nextSearch.category && !nextSearch.province && !sortByDistance) {
-      setAppliedSearch(null);
-      setArtifacts([]);
-      setStatus("idle");
-      return;
-    }
-
-    setAppliedSearch(nextSearch);
     setStatus("loading");
-
-    getArtifacts(nextSearch)
+    getArtifacts({})
       .then((data) => {
+        if (ignore) return;
         setArtifacts(data.items);
         setFilters(data.filters);
         setStatus("success");
       })
       .catch(() => {
-        setStatus("error");
+        if (!ignore) setStatus("error");
       });
-  }
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
-  function handleReset() {
-    setQuery("");
-    setSearchBy("all");
-    setCategory("");
-    setProvince("");
-    setSortByDistance(false);
-    setUserLocation(null);
-    setGeolocationStatus("idle");
-    setAppliedSearch(null);
-    setArtifacts([]);
-    setStatus("idle");
-  }
+  const featured = artifacts[0];
+  const recent = useMemo(() => artifacts.slice(1, 5), [artifacts]);
+  const totalCount = artifacts.length;
+  const provinceCount = filters.provinces.filter(Boolean).length;
+  const categoryCount = filters.categories.filter(Boolean).length;
+  const periodCount = filters.periods.filter(Boolean).length;
 
-  function handleSearchByChange(nextValue) {
-    setSearchBy(nextValue);
-    setQuery("");
-  }
+  const visibleCategories = HIGHLIGHT_CATEGORIES.filter((item) =>
+    filters.categories.includes(item.label)
+  );
+  const categoryList = visibleCategories.length > 0 ? visibleCategories : HIGHLIGHT_CATEGORIES;
 
   return (
     <Layout>
-      <Hero />
+      <section className="showcase-hero">
+        <div className="showcase-hero-copy">
+          <span className="showcase-hero-eyebrow">Heritage · 3D · Interactive</span>
+          <h1>
+            Монгол орны түүхэн дурсгалуудыг<br />
+            <em>гурван хэмжээст</em> орчинд судал.
+          </h1>
+          <p>
+            Хадны зураг, чулуун хөшөө, бичээсийн 3D загвар, газарзүйн байршил,
+            судлаачдын баталгаажуулсан мэдээллийг нэг дор.
+          </p>
+          <div className="showcase-hero-cta">
+            <Link to="/artifacts" className="showcase-cta-primary">
+              Олдвор үзэх
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M5 12h14" />
+                <path d="M13 5l7 7-7 7" />
+              </svg>
+            </Link>
+            <Link to="/map" className="showcase-cta-secondary">
+              Газрын зураг
+            </Link>
+          </div>
+        </div>
 
-      <section className="platform-strip" id="overview">
-        <div>
-          <span className="platform-strip-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M12 2l8.5 4.9v10.2L12 22l-8.5-4.9V6.9L12 2z" />
-              <path d="M3.5 6.9L12 12l8.5-5.1" />
-              <path d="M12 12v10" />
-            </svg>
-          </span>
-          <div>
-            <span className="platform-label">3D Viewer</span>
-            <strong>Three.js + WebGL канваст GLB / GLTF загварыг шууд ачааллаж, эргүүлж үзэх боломж.</strong>
-          </div>
-        </div>
-        <div className="platform-strip-accent">
-          <span className="platform-strip-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z" />
-              <circle cx="12" cy="10" r="3" />
-            </svg>
-          </span>
-          <div>
-            <span className="platform-label">Газрын зураг</span>
-            <strong>Leaflet дээр олдворын газарзүйн байршлыг маркер ба popup-тайгаар илэрхийлнэ.</strong>
-          </div>
-        </div>
-        <div className="platform-strip-violet">
-          <span className="platform-strip-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <circle cx="11" cy="11" r="7" />
-              <path d="M21 21l-4.3-4.3" />
-              <path d="M8 11h6" />
-              <path d="M11 8v6" />
-            </svg>
-          </span>
-          <div>
-            <span className="platform-label">Хайлт ба удирдлага</span>
-            <strong>Нэр, ангилал, үе, аймаг, тагаар хайх. Судлаачийн эрхээр шинэ дурсгал нэмэх.</strong>
-          </div>
+        <div className="showcase-hero-visual" aria-hidden="true">
+          <div className="showcase-shape showcase-shape-a" />
+          <div className="showcase-shape showcase-shape-b" />
+          <div className="showcase-shape showcase-shape-c" />
         </div>
       </section>
 
-      <div id="catalog">
-        <SearchPanel
-          query={query}
-          searchBy={searchBy}
-          category={category}
-          province={province}
-          sortByDistance={sortByDistance}
-          geolocationStatus={geolocationStatus}
-          filters={filters}
-          appliedSearch={appliedSearch}
-          onQueryChange={setQuery}
-          onSearchByChange={handleSearchByChange}
-          onCategoryChange={setCategory}
-          onProvinceChange={setProvince}
-          onSortByDistanceChange={handleSortByDistanceChange}
-          onSubmit={handleSearch}
-          onReset={handleReset}
-        />
-      </div>
+      <section className="showcase-stats">
+        <div className="showcase-stat">
+          <span>{totalCount}</span>
+          <small>Бүртгэгдсэн олдвор</small>
+        </div>
+        <div className="showcase-stat">
+          <span>{provinceCount}</span>
+          <small>Аймаг хамарсан</small>
+        </div>
+        <div className="showcase-stat">
+          <span>{categoryCount}</span>
+          <small>Ангилал</small>
+        </div>
+        <div className="showcase-stat">
+          <span>{periodCount}</span>
+          <small>Цаг үе</small>
+        </div>
+      </section>
 
-      {filtersStatus === "error" && (
-        <p className="feedback error">Шүүлтийн мэдээллийг ачаалж чадсангүй.</p>
-      )}
-      {status === "idle" && (
-        <section className="empty-state search-empty-state">
-          <div className="empty-state-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <circle cx="11" cy="11" r="7" />
-              <path d="M21 21l-4.3-4.3" />
-            </svg>
+      {featured && (
+        <section className="showcase-featured">
+          <div className="showcase-featured-media">
+            <img src={featured.imageUrl} alt={featured.name} />
+            <span className="showcase-featured-badge">3D Ready</span>
           </div>
-          <h2>Хайлт хийж 3D дурсгалуудыг нээгээрэй</h2>
-          <p>Нэр, ангилал, аймаг эсвэл тагаар хайлт хийгээд олдворын 3D загвар, зураг, газарзүйн байршлыг харна.</p>
+          <div className="showcase-featured-body">
+            <span className="showcase-hero-eyebrow">Онцлох олдвор</span>
+            <h2>{featured.nameMn || featured.name}</h2>
+            <p className="showcase-featured-meta">
+              {featured.category} · {featured.period} · {featured.province}
+            </p>
+            <p>{featured.shortDescription}</p>
+            <Link to={`/artifacts/${featured.slug}`} className="showcase-cta-primary inline">
+              Дэлгэрэнгүй харах
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M5 12h14" />
+                <path d="M13 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </div>
         </section>
       )}
-      {status === "loading" && <p className="feedback">Хайлтын үр дүнг ачаалж байна...</p>}
-      {status === "error" && (
-        <p className="feedback error">
-          Хайлтын үр дүнг авч чадсангүй. Backend серверээ шалгана уу.
-        </p>
-      )}
-      {status === "success" && <ArtifactGrid artifacts={artifacts} />}
+
+      <section className="showcase-categories">
+        <header className="home-section-head">
+          <h2>Ангиллаар хайх</h2>
+          <Link to="/artifacts">Бүгдийг үзэх →</Link>
+        </header>
+        <div className="showcase-category-grid">
+          {categoryList.map((item) => (
+            <Link
+              key={item.label}
+              to={`/artifacts?category=${encodeURIComponent(item.label)}`}
+              className={`showcase-category tone-${item.tone}`}
+            >
+              <span className="showcase-category-title">{item.label}</span>
+              <span className="showcase-category-desc">{item.description}</span>
+              <span className="showcase-category-arrow">→</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="showcase-recent">
+        <header className="home-section-head">
+          <h2>Шинэ нэмэгдсэн</h2>
+          <Link to="/artifacts">Бүгдийг үзэх →</Link>
+        </header>
+
+        {status === "loading" && <p className="feedback">Ачаалж байна...</p>}
+        {status === "error" && (
+          <p className="feedback error">Олдворуудыг авч чадсангүй. Backend серверээ шалгана уу.</p>
+        )}
+        {status === "success" && recent.length === 0 && (
+          <p className="feedback">Хараахан бүртгэгдсэн олдвор алга.</p>
+        )}
+        {status === "success" && recent.length > 0 && (
+          <div className="showcase-recent-grid">
+            {recent.map((artifact) => (
+              <ArtifactCard key={artifact.id} artifact={artifact} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="showcase-cta-band">
+        <div>
+          <h2>Та судлаач уу?</h2>
+          <p>Албан имэйлээрээ бүртгүүлж олдвор бүртгэх, 3D загвар оруулах эрхтэй болоорой.</p>
+        </div>
+        <Link to="/register" className="showcase-cta-primary inline">
+          Судлаачаар бүртгүүлэх →
+        </Link>
+      </section>
     </Layout>
   );
 }

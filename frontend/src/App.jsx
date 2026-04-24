@@ -1,8 +1,10 @@
 import { Suspense, lazy } from "react";
 import { Route, Routes } from "react-router-dom";
 import HomePage from "./pages/HomePage.jsx";
+import ArtifactsPage from "./pages/ArtifactsPage.jsx";
+import ArtifactDetailPage from "./pages/ArtifactDetailPage.jsx";
+import MapPage from "./pages/MapPage.jsx";
 
-const ArtifactDetailPage = lazy(() => import("./pages/ArtifactDetailPage.jsx"));
 const ReconstructionLabPage = lazy(() => import("./pages/ReconstructionLabPage.jsx"));
 const LoginPage = lazy(() => import("./pages/LoginPage.jsx"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage.jsx"));
@@ -16,7 +18,7 @@ const VerifyEmailPage = lazy(() => import("./pages/VerifyEmailPage.jsx"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage.jsx"));
 
 function RouteFallback() {
-  return <p className="feedback">Хуудсыг ачааллаж байна...</p>;
+  return <div className="route-loading" aria-busy="true" />;
 }
 
 export default function App() {
@@ -24,6 +26,7 @@ export default function App() {
     <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/artifacts" element={<ArtifactsPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -31,6 +34,7 @@ export default function App() {
         <Route path="/artifacts/new" element={<NewArtifactPage />} />
         <Route path="/artifacts/:slug/edit" element={<NewArtifactPage />} />
         <Route path="/artifacts/:slug" element={<ArtifactDetailPage />} />
+        <Route path="/map" element={<MapPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/admin/queue" element={<AdminQueuePage />} />
