@@ -10,9 +10,15 @@ import {
 } from "../api/client.js";
 import { clearStoredAuth, getStoredAuth, updateStoredUser } from "../auth.js";
 import Layout from "../components/Layout.jsx";
+import UserSidebar from "../components/UserSidebar.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 
-const STATUS_ORDER = ["NEW", "PENDING", "APPROVED", "REJECTED"];
+const STATUS_META = [
+  { value: "NEW", label: "Шинэ (NEW)", tone: "blue" },
+  { value: "PENDING", label: "Хүлээгдэж буй (PENDING)", tone: "amber" },
+  { value: "APPROVED", label: "Баталгаажсан (APPROVED)", tone: "green" },
+  { value: "REJECTED", label: "Татгалзсан (REJECTED)", tone: "red" }
+];
 
 function countByStatus(items) {
   return items.reduce(
@@ -33,6 +39,7 @@ export default function DashboardPage() {
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
   const [busySlug, setBusySlug] = useState(null);
+  const [filterStatus, setFilterStatus] = useState("ALL");
   const [resendStatus, setResendStatus] = useState("idle");
   const [resendMessage, setResendMessage] = useState("");
 
@@ -153,32 +160,42 @@ export default function DashboardPage() {
   const isUnverified =
     auth.user.role === "researcher" && auth.user.verificationStatus !== "verified";
 
+  const filtered = filterStatus === "ALL"
+    ? items
+    : items.filter((item) => item.status === filterStatus);
+
   return (
-    <Layout>
-      <section className="hero hero-compact">
-        <div className="hero-copy">
-          <p className="eyebrow">Судлаачийн самбар</p>
-          <h1>Миний олдворууд</h1>
-          <p className="hero-text">
-            Бүртгэсэн дурсгалаа төлвөөр нь хянаж, шалгуулахаар илгээ.
-          </p>
+    <Layout sidebar={<UserSidebar user={auth.user} />}>
+      <header className="dash-header">
+        <div>
+          <h1 className="dash-title">Миний олдворууд</h1>
+          <p className="dash-sub">Бүртгэсэн дурсгалаа төлвөөр нь хянаж, шалгуулахаар илгээгээрэй.</p>
         </div>
-      </section>
+        {isUnverified ? (
+          <span className="action-button is-disabled" aria-disabled="true">
+            + Шинэ олдвор
+          </span>
+        ) : (
+          <Link to="/artifacts/new" className="dash-new-button">
+            + Шинэ олдвор
+          </Link>
+        )}
+      </header>
 
       {isUnverified && (
-        <section className="info-card verification-banner">
+        <section className="dash-banner">
           <div>
             <strong>Имэйл хараахан баталгаажаагүй байна.</strong>
-            <p className="field-help">
+            <p>
               Албан имэйл рүү илгээсэн холбоосыг дарж имэйлээ баталгаажуулах хүртэл шинэ
-              олдвор бүртгэх боломжгүй. Холбоос ирээгүй бол доорх товчоор дахин илгээ.
+              олдвор бүртгэх боломжгүй.
             </p>
             {resendStatus === "success" && <p className="feedback">{resendMessage}</p>}
             {resendStatus === "error" && <p className="feedback error">{resendMessage}</p>}
           </div>
           <button
             type="button"
-            className="action-button compact"
+            className="dash-banner-button"
             onClick={handleResend}
             disabled={resendStatus === "loading"}
           >
@@ -187,67 +204,72 @@ export default function DashboardPage() {
         </section>
       )}
 
-      <section className="dashboard-stats">
-        {STATUS_ORDER.map((value) => (
-          <div key={value} className="dashboard-stat">
-            <span className="dashboard-stat-label">
-              <StatusBadge status={value} />
-            </span>
-            <span className="dashboard-stat-value">{counts[value] || 0}</span>
-          </div>
+      <section className="dash-stats">
+        <button
+          type="button"
+          className={`dash-stat ${filterStatus === "ALL" ? "is-active" : ""}`}
+          onClick={() => setFilterStatus("ALL")}
+        >
+          <span className="dash-stat-label">Нийт</span>
+          <span className="dash-stat-value">{items.length}</span>
+        </button>
+        {STATUS_META.map((meta) => (
+          <button
+            key={meta.value}
+            type="button"
+            className={`dash-stat tone-${meta.tone} ${filterStatus === meta.value ? "is-active" : ""}`}
+            onClick={() => setFilterStatus(meta.value)}
+          >
+            <span className="dash-stat-label">{meta.label}</span>
+            <span className="dash-stat-value">{counts[meta.value] || 0}</span>
+          </button>
         ))}
       </section>
 
-      <div className="dashboard-actions">
-        {isUnverified ? (
-          <span className="action-button is-disabled" aria-disabled="true">
-            + Шинэ олдвор бүртгэх (имэйл баталгаажуулсны дараа)
-          </span>
-        ) : (
-          <Link to="/artifacts/new" className="action-button">
-            + Шинэ олдвор бүртгэх
-          </Link>
-        )}
-      </div>
-
       {status === "loading" && <p className="feedback">Олдворуудыг ачаалж байна...</p>}
-      {status === "error" && <p className="feedback error">{error || "Алдаа гарлаа."}</p>}
+      {error && <p className="feedback error">{error}</p>}
 
       {status === "success" && items.length === 0 && (
         <section className="empty-state">
           <h2>Та одоогоор бүртгэсэн олдворгүй байна</h2>
-          <p>"+ Шинэ олдвор бүртгэх" товчоор эхний бүртгэлээ үүсгээрэй.</p>
+          <p>“+ Шинэ олдвор” товчоор эхний бүртгэлээ үүсгээрэй.</p>
         </section>
       )}
 
       {status === "success" && items.length > 0 && (
-        <section className="info-card dashboard-table">
-          <table className="dashboard-grid">
+        <section className="dash-table-card">
+          <table className="dash-table">
             <thead>
               <tr>
                 <th>Олдвор</th>
                 <th>Ангилал</th>
+                <th>Огноо</th>
                 <th>Төлөв</th>
                 <th>Тэмдэглэл</th>
                 <th>Үйлдэл</th>
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => {
+              {filtered.map((item) => {
                 const isBusy = busySlug === item.slug;
                 return (
                   <tr key={item.id}>
                     <td>
                       <strong>{item.nameMn || item.name}</strong>
-                      <div className="muted">{item.province} · {item.location}</div>
+                      <div className="dash-muted">{item.province}</div>
                     </td>
                     <td>{item.category}</td>
+                    <td className="dash-muted">
+                      {item.createdAt
+                        ? new Date(item.createdAt).toLocaleDateString("mn-MN")
+                        : "—"}
+                    </td>
                     <td>
                       <StatusBadge status={item.status} />
                     </td>
-                    <td className="muted">
+                    <td className="dash-muted">
                       {item.status === "REJECTED" && item.reviewNote ? (
-                        <span>Татгалзсан шалтгаан: {item.reviewNote}</span>
+                        <span>{item.reviewNote}</span>
                       ) : item.status === "APPROVED" && item.reviewedAt ? (
                         <span>Баталгаажсан: {new Date(item.reviewedAt).toLocaleDateString("mn-MN")}</span>
                       ) : (
@@ -255,40 +277,47 @@ export default function DashboardPage() {
                       )}
                     </td>
                     <td>
-                      <div className="dashboard-row-actions">
-                        <Link to={`/artifacts/${item.slug}`} className="ghost-button">
-                          Үзэх
+                      <div className="dash-row-actions">
+                        <Link to={`/artifacts/${item.slug}`} className="dash-action ghost" title="Үзэх" aria-label="Үзэх">
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
                         </Link>
                         {item.status === "NEW" && (
                           <>
-                            <Link
-                              to={`/artifacts/${item.slug}/edit`}
-                              className="ghost-button"
-                            >
-                              Засах
+                            <Link to={`/artifacts/${item.slug}/edit`} className="dash-action ghost" title="Засах" aria-label="Засах">
+                              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                              </svg>
                             </Link>
                             <button
                               type="button"
-                              className="action-button compact"
+                              className="dash-action submit"
                               disabled={isBusy}
                               onClick={() => handleSubmit(item.slug)}
                             >
-                              {isBusy ? "Илгээж байна..." : "Илгээх"}
+                              {isBusy ? "..." : "Илгээх"}
                             </button>
                             <button
                               type="button"
-                              className="ghost-button danger"
+                              className="dash-action ghost danger"
                               disabled={isBusy}
                               onClick={() => handleDelete(item.slug)}
+                              title="Устгах"
+                              aria-label="Устгах"
                             >
-                              Устгах
+                              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M18 6L6 18M6 6l12 12" />
+                              </svg>
                             </button>
                           </>
                         )}
                         {item.status === "REJECTED" && (
                           <button
                             type="button"
-                            className="action-button compact"
+                            className="dash-action submit"
                             disabled={isBusy}
                             onClick={() => handleRevertAndEdit(item.slug)}
                           >

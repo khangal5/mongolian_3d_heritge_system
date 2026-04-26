@@ -8,6 +8,7 @@ import {
 } from "../api/client.js";
 import { getStoredAuth } from "../auth.js";
 import Layout from "../components/Layout.jsx";
+import UserSidebar from "../components/UserSidebar.jsx";
 
 const STATUS_LABELS = {
   submitted: { text: "Хүлээгдэж буй", tone: "pending" },
@@ -23,7 +24,7 @@ function VerificationBadge({ status }) {
 function formatDate(value) {
   if (!value) return "—";
   try {
-    return new Date(value).toLocaleString("mn-MN");
+    return new Date(value).toLocaleDateString("mn-MN");
   } catch {
     return value;
   }
@@ -45,7 +46,7 @@ export default function AdminResearchersPage() {
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState(null);
   const [lightbox, setLightbox] = useState(null);
-  const [expandedId, setExpandedId] = useState(null);
+  const [filter, setFilter] = useState("all");
 
   const refresh = useCallback(async () => {
     setStatus("loading");
@@ -69,9 +70,7 @@ export default function AdminResearchersPage() {
       navigate("/", { replace: true });
       return;
     }
-    if (bootstrappedRef.current) {
-      return;
-    }
+    if (bootstrappedRef.current) return;
     bootstrappedRef.current = true;
     refresh();
   }, [auth, navigate, refresh]);
@@ -105,178 +104,126 @@ export default function AdminResearchersPage() {
     }
   }
 
-  if (!auth?.user) {
-    return null;
-  }
+  if (!auth?.user) return null;
+
+  const filtered = filter === "all" ? items : items.filter((u) => u.verificationStatus === filter);
 
   return (
-    <Layout>
-      <section className="hero hero-compact">
-        <div className="hero-copy">
-          <p className="eyebrow">Админ самбар</p>
-          <h1>Судлаачдын бүртгэл</h1>
-          <p className="hero-text">
-            Бүртгэгдсэн судлаачдын мэдээлэл, үнэмлэхний зураг ба имэйл баталгаажуулалтын
-            төлөв.
-          </p>
+    <Layout sidebar={<UserSidebar user={auth.user} />}>
+      <header className="dash-header">
+        <div>
+          <h1 className="dash-title">Судлаачдын бүртгэл</h1>
+          <p className="dash-sub">Бүртгэгдсэн судлаачдын мэдээлэл, баталгаажуулалтын төлөв ба үнэмлэхний баримт.</p>
         </div>
-      </section>
+      </header>
+
+      <div className="admin-tab-row">
+        <button
+          type="button"
+          className={`admin-tab-pill ${filter === "all" ? "is-active" : ""}`}
+          onClick={() => setFilter("all")}
+        >
+          Бүгд ({items.length})
+        </button>
+        <button
+          type="button"
+          className={`admin-tab-pill ${filter === "submitted" ? "is-active" : ""}`}
+          onClick={() => setFilter("submitted")}
+        >
+          Хүлээгдэж буй ({items.filter((u) => u.verificationStatus === "submitted").length})
+        </button>
+        <button
+          type="button"
+          className={`admin-tab-pill ${filter === "verified" ? "is-active" : ""}`}
+          onClick={() => setFilter("verified")}
+        >
+          Баталгаажсан ({items.filter((u) => u.verificationStatus === "verified").length})
+        </button>
+      </div>
 
       {status === "loading" && <p className="feedback">Жагсаалт ачаалж байна...</p>}
       {error && <p className="feedback error">{error}</p>}
 
-      {status === "success" && items.length === 0 && (
+      {status === "success" && filtered.length === 0 && (
         <section className="empty-state">
-          <h2>Бүртгэлтэй судлаач алга</h2>
-          <p>Хэн ч судлаачаар бүртгүүлээгүй байна.</p>
+          <h2>Жагсаалтад судлаач алга</h2>
+          <p>Энэ шүүлтэд тохирох хэрэглэгч одоохондоо байхгүй.</p>
         </section>
       )}
 
-      {status === "success" && items.length > 0 && (
-        <section className="researcher-list">
-          {items.map((user) => {
+      {status === "success" && filtered.length > 0 && (
+        <div className="researcher-grid">
+          {filtered.map((user) => {
             const proofUrl = buildUploadUrl(user.verificationDocumentUrl);
             const proofIsImage = isImagePath(user.verificationDocumentUrl);
             const isBusy = busyId === user.id;
-            const isExpanded = expandedId === user.id;
-            const verifications = user.verifications || [];
-            const activePending = verifications.find(
-              (v) => !v.consumedAt && new Date(v.expiresAt) > new Date()
-            );
 
             return (
-              <article key={user.id} className="researcher-card">
-                <div className="researcher-card-main">
-                  <div className="researcher-photo-shell">
+              <article key={user.id} className="researcher-card-v2">
+                <div className="researcher-card-header">
+                  <div className="researcher-card-photo">
                     {proofIsImage && proofUrl ? (
                       <button
                         type="button"
-                        className="researcher-photo-button"
+                        className="researcher-photo-button-v2"
                         onClick={() => setLightbox({ url: proofUrl, name: user.fullName })}
                       >
-                        <img
-                          src={proofUrl}
-                          alt={`${user.fullName} verification`}
-                          className="researcher-photo"
-                        />
-                        <span className="researcher-photo-hint">Томоор үзэх</span>
+                        <img src={proofUrl} alt={`${user.fullName} verification`} />
                       </button>
                     ) : proofUrl ? (
-                      <a
-                        href={proofUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="researcher-photo-fallback"
-                      >
-                        Файл нээх ↗
+                      <a href={proofUrl} target="_blank" rel="noreferrer" className="researcher-photo-fallback-v2">
+                        Файл харах ↗
                       </a>
                     ) : (
-                      <div className="researcher-photo-fallback">Файлгүй</div>
+                      <div className="researcher-photo-fallback-v2">Файлгүй</div>
                     )}
                   </div>
-
-                  <div className="researcher-info">
-                    <header className="researcher-info-header">
-                      <h2>{user.fullName}</h2>
-                      <VerificationBadge status={user.verificationStatus} />
-                    </header>
-                    <ul className="researcher-info-grid">
-                      <li><span>Имэйл</span><strong>{user.email}</strong></li>
-                      <li><span>Байгууллага</span><strong>{user.organization || "—"}</strong></li>
-                      <li><span>Хэлтэс</span><strong>{user.departmentName || "—"}</strong></li>
-                      <li><span>Албан тушаал</span><strong>{user.positionTitle || "—"}</strong></li>
-                      <li><span>Утас</span><strong>{user.phoneNumber || "—"}</strong></li>
-                      <li><span>Ажилтны код</span><strong>{user.employeeCode || "—"}</strong></li>
-                      <li><span>Бүртгэгдсэн</span><strong>{formatDate(user.createdAt)}</strong></li>
-                      <li><span>Үнэмлэхний файл</span><strong>{user.verificationDocumentName || "—"}</strong></li>
-                    </ul>
-                    {user.researchFocus && (
-                      <p className="researcher-focus">
-                        <span>Судалгааны чиглэл:</span> {user.researchFocus}
-                      </p>
-                    )}
-
-                    <div className="researcher-actions">
-                      {user.verificationStatus !== "verified" && (
-                        <button
-                          type="button"
-                          className="action-button compact"
-                          disabled={isBusy}
-                          onClick={() => handleVerify(user.id)}
-                        >
-                          {isBusy ? "..." : "Гар аргаар баталгаажуулах"}
-                        </button>
-                      )}
-                      {user.verificationStatus === "verified" && (
-                        <button
-                          type="button"
-                          className="ghost-button danger"
-                          disabled={isBusy}
-                          onClick={() => handleRevoke(user.id)}
-                        >
-                          Баталгаажуулалт цуцлах
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={() => setExpandedId(isExpanded ? null : user.id)}
-                      >
-                        {isExpanded ? "Имэйл токенуудыг хаах" : `Имэйл токенуудыг харах (${verifications.length})`}
-                      </button>
-                    </div>
+                  <div className="researcher-card-title">
+                    <h2>{user.fullName}</h2>
+                    <p>{user.email}</p>
+                    <VerificationBadge status={user.verificationStatus} />
                   </div>
                 </div>
 
-                {activePending && !isExpanded && (
-                  <div className="researcher-pending-hint">
-                    Идэвхтэй token байгаа: дуусах хугацаа {formatDate(activePending.expiresAt)}
-                  </div>
+                <dl className="researcher-card-body">
+                  <div><dt>Байгууллага</dt><dd>{user.organization || "—"}</dd></div>
+                  <div><dt>Хэлтэс</dt><dd>{user.departmentName || "—"}</dd></div>
+                  <div><dt>Албан тушаал</dt><dd>{user.positionTitle || "—"}</dd></div>
+                  <div><dt>Утас</dt><dd>{user.phoneNumber || "—"}</dd></div>
+                  <div><dt>Бүртгэгдсэн</dt><dd>{formatDate(user.createdAt)}</dd></div>
+                </dl>
+
+                {user.researchFocus && (
+                  <p className="researcher-card-focus">
+                    <strong>Судалгааны чиглэл:</strong> {user.researchFocus}
+                  </p>
                 )}
 
-                {isExpanded && verifications.length > 0 && (
-                  <div className="researcher-tokens">
-                    <h3>email_verifications</h3>
-                    <table className="dashboard-grid">
-                      <thead>
-                        <tr>
-                          <th>Имэйл</th>
-                          <th>Үүсгэсэн</th>
-                          <th>Дуусах</th>
-                          <th>Ашигласан</th>
-                          <th>Төлөв</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {verifications.map((v) => {
-                          const expired = new Date(v.expiresAt) < new Date();
-                          const tokenStatus = v.consumedAt
-                            ? "Ашигласан"
-                            : expired
-                              ? "Хугацаа дууссан"
-                              : "Идэвхтэй";
-                          return (
-                            <tr key={v.id}>
-                              <td>{v.email}</td>
-                              <td className="muted">{formatDate(v.createdAt)}</td>
-                              <td className="muted">{formatDate(v.expiresAt)}</td>
-                              <td className="muted">{formatDate(v.consumedAt)}</td>
-                              <td>{tokenStatus}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {isExpanded && verifications.length === 0 && (
-                  <p className="muted" style={{ paddingLeft: 16 }}>Token бичлэг алга.</p>
-                )}
+                <footer className="researcher-card-actions">
+                  {user.verificationStatus !== "verified" ? (
+                    <button
+                      type="button"
+                      className="dash-action submit"
+                      disabled={isBusy}
+                      onClick={() => handleVerify(user.id)}
+                    >
+                      {isBusy ? "..." : "Гар аргаар баталгаажуулах"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="dash-action ghost danger"
+                      disabled={isBusy}
+                      onClick={() => handleRevoke(user.id)}
+                    >
+                      Баталгаажуулалт цуцлах
+                    </button>
+                  )}
+                </footer>
               </article>
             );
           })}
-        </section>
+        </div>
       )}
 
       {lightbox && (
@@ -287,11 +234,7 @@ export default function AdminResearchersPage() {
           onClick={() => setLightbox(null)}
         >
           <div className="lightbox-content" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              className="lightbox-close"
-              onClick={() => setLightbox(null)}
-            >
+            <button type="button" className="lightbox-close" onClick={() => setLightbox(null)}>
               ✕
             </button>
             <img src={lightbox.url} alt={lightbox.name} />

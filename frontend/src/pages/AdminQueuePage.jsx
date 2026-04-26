@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   approveArtifact,
@@ -7,6 +7,7 @@ import {
 } from "../api/client.js";
 import { getStoredAuth } from "../auth.js";
 import Layout from "../components/Layout.jsx";
+import UserSidebar from "../components/UserSidebar.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 
 const TABS = [
@@ -26,7 +27,8 @@ export default function AdminQueuePage() {
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
   const [busySlug, setBusySlug] = useState(null);
-  const [rejectingSlug, setRejectingSlug] = useState(null);
+  const [selectedSlug, setSelectedSlug] = useState(null);
+  const [rejectMode, setRejectMode] = useState(false);
   const [rejectNote, setRejectNote] = useState("");
 
   const refresh = useCallback(
@@ -37,6 +39,11 @@ export default function AdminQueuePage() {
         const data = await getAdminQueue(tab);
         setItems(data.items);
         setStatus("success");
+        if (data.items.length > 0) {
+          setSelectedSlug(data.items[0].slug);
+        } else {
+          setSelectedSlug(null);
+        }
       } catch (requestError) {
         setError(requestError.message);
         setStatus("error");
@@ -55,13 +62,21 @@ export default function AdminQueuePage() {
       return;
     }
     refresh(activeTab);
+    setRejectMode(false);
+    setRejectNote("");
   }, [auth, navigate, refresh, activeTab]);
 
-  async function handleApprove(slug) {
-    setBusySlug(slug);
+  const selected = useMemo(
+    () => items.find((item) => item.slug === selectedSlug) || null,
+    [items, selectedSlug]
+  );
+
+  async function handleApprove() {
+    if (!selected) return;
+    setBusySlug(selected.slug);
     setError("");
     try {
-      await approveArtifact(slug);
+      await approveArtifact(selected.slug);
       await refresh(activeTab);
     } catch (requestError) {
       setError(requestError.message);
@@ -70,25 +85,27 @@ export default function AdminQueuePage() {
     }
   }
 
-  function startReject(slug) {
-    setRejectingSlug(slug);
+  function startReject() {
+    setRejectMode(true);
     setRejectNote("");
+    setError("");
   }
 
   function cancelReject() {
-    setRejectingSlug(null);
+    setRejectMode(false);
     setRejectNote("");
   }
 
   async function confirmReject() {
+    if (!selected) return;
     if (!rejectNote.trim()) {
       setError("Татгалзах шалтгаан тэмдэглэгээ заавал шаардлагатай");
       return;
     }
-    setBusySlug(rejectingSlug);
+    setBusySlug(selected.slug);
     setError("");
     try {
-      await rejectArtifact(rejectingSlug, rejectNote.trim());
+      await rejectArtifact(selected.slug, rejectNote.trim());
       cancelReject();
       await refresh(activeTab);
     } catch (requestError) {
@@ -103,23 +120,20 @@ export default function AdminQueuePage() {
   }
 
   return (
-    <Layout>
-      <section className="hero hero-compact">
-        <div className="hero-copy">
-          <p className="eyebrow">Админ самбар</p>
-          <h1>Олдворын баталгаажуулалт</h1>
-          <p className="hero-text">
-            Судлаачдын илгээсэн өвийн мэдээллийг шалгаж, баталгаажуулах эсвэл татгалзах.
-          </p>
+    <Layout sidebar={<UserSidebar user={auth.user} />}>
+      <header className="dash-header">
+        <div>
+          <h1 className="dash-title">Олдворын баталгаажуулалт</h1>
+          <p className="dash-sub">Илгээгдсэн олдворуудыг шалгаж, нийтлэх эсэх шийдвэрийг гаргана.</p>
         </div>
-      </section>
+      </header>
 
-      <div className="admin-tabs">
+      <div className="admin-tab-row">
         {TABS.map((tab) => (
           <button
             key={tab.value}
             type="button"
-            className={`admin-tab ${activeTab === tab.value ? "is-active" : ""}`}
+            className={`admin-tab-pill ${activeTab === tab.value ? "is-active" : ""}`}
             onClick={() => setActiveTab(tab.value)}
           >
             {tab.label}
@@ -128,8 +142,6 @@ export default function AdminQueuePage() {
       </div>
 
       {status === "loading" && <p className="feedback">Жагсаалт ачаалж байна...</p>}
-      {status === "error" && <p className="feedback error">{error || "Алдаа гарлаа."}</p>}
-      {error && status !== "error" && <p className="feedback error">{error}</p>}
 
       {status === "success" && items.length === 0 && (
         <section className="empty-state">
@@ -139,97 +151,154 @@ export default function AdminQueuePage() {
       )}
 
       {status === "success" && items.length > 0 && (
-        <section className="info-card dashboard-table">
-          <table className="dashboard-grid">
-            <thead>
-              <tr>
-                <th>Олдвор</th>
-                <th>Ангилал</th>
-                <th>Үе</th>
-                <th>Төлөв</th>
-                <th>Тэмдэглэл</th>
-                <th>Үйлдэл</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => {
-                const isBusy = busySlug === item.slug;
-                const isRejecting = rejectingSlug === item.slug;
-                return (
-                  <tr key={item.id}>
-                    <td>
-                      <strong>{item.nameMn || item.name}</strong>
-                      <div className="muted">{item.province} · {item.location}</div>
-                    </td>
-                    <td>{item.category}</td>
-                    <td>{item.period}</td>
-                    <td>
+        <div className="admin-split">
+          <aside className="admin-list">
+            <div className="admin-list-header">
+              <span>{items.length} олдвор</span>
+            </div>
+            <ul>
+              {items.map((item) => (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    className={`admin-list-item ${selectedSlug === item.slug ? "is-active" : ""}`}
+                    onClick={() => {
+                      setSelectedSlug(item.slug);
+                      setRejectMode(false);
+                      setError("");
+                    }}
+                  >
+                    <div className="admin-list-name">{item.nameMn || item.name}</div>
+                    <div className="admin-list-meta">
+                      <span>{item.province}</span>
                       <StatusBadge status={item.status} />
-                    </td>
-                    <td className="muted">
-                      {item.reviewNote ? <span>{item.reviewNote}</span> : <span>—</span>}
-                    </td>
-                    <td>
-                      <div className="dashboard-row-actions">
-                        <Link to={`/artifacts/${item.slug}`} className="ghost-button">
-                          Үзэх
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </aside>
+
+          <section className="admin-detail">
+            {selected ? (
+              <>
+                <div className="admin-detail-header">
+                  <div>
+                    <h2>{selected.nameMn || selected.name}</h2>
+                    <p className="admin-detail-sub">
+                      {selected.province} · {selected.location} · {selected.category} · {selected.period}
+                    </p>
+                  </div>
+                  <StatusBadge status={selected.status} />
+                </div>
+
+                {selected.imageUrl && (
+                  <div className="admin-detail-media">
+                    <img src={selected.imageUrl} alt={selected.name} />
+                  </div>
+                )}
+
+                <div className="admin-detail-grid">
+                  <div>
+                    <span className="admin-detail-label">Товч тайлбар</span>
+                    <p>{selected.shortDescription}</p>
+                  </div>
+                  <div>
+                    <span className="admin-detail-label">Дэлгэрэнгүй</span>
+                    <p>{selected.description}</p>
+                  </div>
+                  {selected.coordinates && (
+                    <div>
+                      <span className="admin-detail-label">Координат</span>
+                      <p>{selected.coordinates.lat?.toFixed?.(5)}, {selected.coordinates.lng?.toFixed?.(5)}</p>
+                    </div>
+                  )}
+                  {selected.reviewNote && (
+                    <div>
+                      <span className="admin-detail-label">Тэмдэглэл</span>
+                      <p>{selected.reviewNote}</p>
+                    </div>
+                  )}
+                </div>
+
+                {error && <p className="feedback error">{error}</p>}
+
+                {activeTab === "PENDING" && (
+                  <div className="admin-detail-actions">
+                    {!rejectMode ? (
+                      <>
+                        <Link to={`/artifacts/${selected.slug}`} className="dash-action ghost">
+                          Бүтэн дэлгэрэнгүй
                         </Link>
-                        {activeTab === "PENDING" && !isRejecting && (
-                          <>
-                            <button
-                              type="button"
-                              className="action-button compact"
-                              disabled={isBusy}
-                              onClick={() => handleApprove(item.slug)}
-                            >
-                              {isBusy ? "..." : "Баталгаажуулах"}
-                            </button>
-                            <button
-                              type="button"
-                              className="ghost-button danger"
-                              disabled={isBusy}
-                              onClick={() => startReject(item.slug)}
-                            >
-                              Татгалзах
-                            </button>
-                          </>
-                        )}
-                        {isRejecting && (
-                          <div className="reject-form">
-                            <textarea
-                              rows="2"
-                              placeholder="Татгалзах шалтгаан..."
-                              value={rejectNote}
-                              onChange={(event) => setRejectNote(event.target.value)}
-                            />
-                            <div className="reject-form-actions">
-                              <button
-                                type="button"
-                                className="action-button compact danger"
-                                disabled={isBusy}
-                                onClick={confirmReject}
-                              >
-                                {isBusy ? "..." : "Баталгаажуулах татгалзал"}
-                              </button>
-                              <button
-                                type="button"
-                                className="ghost-button"
-                                onClick={cancelReject}
-                                disabled={isBusy}
-                              >
-                                Болих
-                              </button>
-                            </div>
-                          </div>
-                        )}
+                        <Link to={`/artifacts/${selected.slug}/edit`} className="dash-action ghost">
+                          Засах · 3D нэмэх
+                        </Link>
+                        <button
+                          type="button"
+                          className="admin-action approve"
+                          disabled={busySlug === selected.slug}
+                          onClick={handleApprove}
+                        >
+                          {busySlug === selected.slug ? "..." : "Баталгаажуулах"}
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-action reject"
+                          disabled={busySlug === selected.slug}
+                          onClick={startReject}
+                        >
+                          Татгалзах
+                        </button>
+                      </>
+                    ) : (
+                      <div className="admin-reject-form">
+                        <label htmlFor="rejectNote">Татгалзах шалтгаан *</label>
+                        <textarea
+                          id="rejectNote"
+                          rows="3"
+                          value={rejectNote}
+                          onChange={(event) => setRejectNote(event.target.value)}
+                          placeholder="Жишээ: 3D загвар бага нягтралтай байна. Дахин boловсруулна уу."
+                        />
+                        <div className="admin-reject-form-actions">
+                          <button
+                            type="button"
+                            className="admin-action reject"
+                            disabled={busySlug === selected.slug}
+                            onClick={confirmReject}
+                          >
+                            {busySlug === selected.slug ? "..." : "Татгалзалыг илгээх"}
+                          </button>
+                          <button
+                            type="button"
+                            className="dash-action ghost"
+                            onClick={cancelReject}
+                            disabled={busySlug === selected.slug}
+                          >
+                            Болих
+                          </button>
+                        </div>
                       </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </section>
+                    )}
+                  </div>
+                )}
+
+                {activeTab !== "PENDING" && (
+                  <div className="admin-detail-actions">
+                    <Link to={`/artifacts/${selected.slug}`} className="dash-action ghost">
+                      Бүтэн дэлгэрэнгүй
+                    </Link>
+                    <Link to={`/artifacts/${selected.slug}/edit`} className="dash-action ghost">
+                      Засах
+                    </Link>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="feedback">Жагсаалтаас сонгоно уу.</p>
+            )}
+          </section>
+        </div>
       )}
     </Layout>
   );
