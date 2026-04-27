@@ -1,6 +1,7 @@
 import ArtifactCard from "./ArtifactCard.jsx";
+import ArtifactListItem from "./ArtifactListItem.jsx";
 
-export default function ArtifactGrid({ artifacts }) {
+export default function ArtifactGrid({ artifacts, hideHeader = false, view = "grid" }) {
   if (!artifacts.length) {
     return (
       <section className="empty-state">
@@ -12,19 +13,29 @@ export default function ArtifactGrid({ artifacts }) {
 
   return (
     <>
-      <section className="section-heading">
-        <div>
-          <p className="eyebrow">Хайлтын үр дүн</p>
-          <h2>Олдворууд</h2>
-        </div>
-        <strong>{artifacts.length} олдвор</strong>
-      </section>
+      {!hideHeader && (
+        <section className="section-heading">
+          <div>
+            <p className="eyebrow">Хайлтын үр дүн</p>
+            <h2>Олдворууд</h2>
+          </div>
+          <strong>{artifacts.length} олдвор</strong>
+        </section>
+      )}
 
-      <section className="artifact-grid">
-        {artifacts.map((artifact) => (
-          <ArtifactCard key={artifact.id} artifact={artifact} />
-        ))}
-      </section>
+      {view === "list" ? (
+        <section className="artifact-list">
+          {artifacts.map((artifact) => (
+            <ArtifactListItem key={artifact.id} artifact={artifact} />
+          ))}
+        </section>
+      ) : (
+        <section className="artifact-grid">
+          {artifacts.map((artifact) => (
+            <ArtifactCard key={artifact.id} artifact={artifact} />
+          ))}
+        </section>
+      )}
     </>
   );
 }

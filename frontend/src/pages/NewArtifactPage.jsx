@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   createArtifactRequest,
   getArtifactBySlug,
@@ -8,6 +8,10 @@ import {
 } from "../api/client.js";
 import { getStoredAuth } from "../auth.js";
 import Layout from "../components/Layout.jsx";
+import UserSidebar from "../components/UserSidebar.jsx";
+import MapPicker from "../components/MapPicker.jsx";
+import { MONGOLIA_PROVINCES } from "../constants/provinces.js";
+import { ARTIFACT_CATEGORIES } from "../constants/categories.js";
 
 const initialForm = {
   slug: "",
@@ -26,6 +30,15 @@ const initialForm = {
   gallery: "",
   tags: ""
 };
+
+function slugify(text) {
+  return (text || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9а-яөүё\s-]/gi, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+}
 
 function artifactToForm(artifact) {
   return {
@@ -53,6 +66,7 @@ export default function NewArtifactPage() {
   const isEditMode = Boolean(editSlug);
   const [form, setForm] = useState(initialForm);
   const [modelFile, setModelFile] = useState(null);
+  const [imageDragOver, setImageDragOver] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [uploadStatus, setUploadStatus] = useState("idle");
@@ -60,16 +74,15 @@ export default function NewArtifactPage() {
   const auth = typeof window === "undefined" ? null : getStoredAuth();
 
   useEffect(() => {
-    if (!isEditMode) {
-      return;
-    }
+    if (!isEditMode) return;
 
     let ignore = false;
     setLoadStatus("loading");
     getArtifactBySlug(editSlug)
       .then((data) => {
         if (ignore) return;
-        if (data.status !== "NEW") {
+        const isAdmin = auth?.user?.role === "admin";
+        if (data.status !== "NEW" && !isAdmin) {
           setError("Зөвхөн NEW төлөвт байгаа өвийг засах боломжтой.");
           setLoadStatus("error");
           return;
@@ -86,20 +99,36 @@ export default function NewArtifactPage() {
     return () => {
       ignore = true;
     };
-  }, [editSlug, isEditMode]);
+  }, [editSlug, isEditMode, auth?.user?.role]);
+
+  function handleNameChange(value) {
+    setForm((current) => {
+      const next = { ...current, name: value };
+      if (!isEditMode && (!current.slug || current.slug === slugify(current.name))) {
+        next.slug = slugify(value);
+      }
+      if (!current.nameMn || current.nameMn === current.name) {
+        next.nameMn = value;
+      }
+      return next;
+    });
+  }
+
+  function handleMapPick(lat, lng) {
+    setForm((current) => ({
+      ...current,
+      lat: lat.toFixed(6),
+      lng: lng.toFixed(6)
+    }));
+  }
 
   async function resolveModelUrl() {
-    if (!modelFile) {
-      return form.modelUrl;
-    }
-
+    if (!modelFile) return form.modelUrl;
     const payload = new FormData();
     payload.set("model", modelFile);
-
     setUploadStatus("uploading");
     const response = await uploadArtifactModel(payload);
     setUploadStatus("uploaded");
-
     return response.modelUrl;
   }
 
@@ -110,9 +139,8 @@ export default function NewArtifactPage() {
 
     try {
       const modelUrl = await resolveModelUrl();
-
       const payload = {
-        slug: form.slug,
+        slug: form.slug || slugify(form.name),
         name: form.name,
         nameMn: form.nameMn || form.name,
         category: form.category,
@@ -127,14 +155,8 @@ export default function NewArtifactPage() {
         description: form.description,
         imageUrl: form.imageUrl,
         modelUrl,
-        gallery: form.gallery
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean),
-        tags: form.tags
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean)
+        gallery: form.gallery.split(",").map((s) => s.trim()).filter(Boolean),
+        tags: form.tags.split(",").map((s) => s.trim()).filter(Boolean)
       };
 
       if (isEditMode) {
@@ -158,35 +180,25 @@ export default function NewArtifactPage() {
   const submitting = uploadStatus === "uploading";
   const formDisabled = !auth?.user || submitting || (isEditMode && loadStatus !== "success");
 
-  return (
-    <Layout>
-      <section className="hero hero-compact">
-        <div className="hero-copy">
-          <p className="eyebrow">{isEditMode ? "Олдвор засах" : "Шинэ Дурсгал"}</p>
-          <h1>
-            {isEditMode
-              ? "NEW төлөвт байгаа олдвороо засаад дахин илгээнэ үү."
-              : "Судлаач эрхтэй хэрэглэгч шинэ дурсгал нэмнэ."}
-          </h1>
-          <p className="hero-text">
-            Зураг, тайлбар, 3D файлаа оруулаад {isEditMode ? "хадгална." : "бүртгэнэ."}
-          </p>
-        </div>
-      </section>
-
-      {!auth?.user && (
-        <p className="feedback error">
+  if (!auth?.user) {
+    return (
+      <Layout>
+        <p className="feedback error" style={{ margin: "40px auto", maxWidth: 720 }}>
           Энэ үйлдлийг хийхийн тулд эхлээд судлаачаар бүртгүүлж, нэвтэрнэ үү.
         </p>
-      )}
+      </Layout>
+    );
+  }
 
-      {auth?.user && (
-        <section className="info-card">
-          <p className="field-help">
-            Одоогоор нэвтэрсэн хэрэглэгч: <strong>{auth.user.fullName}</strong> ({auth.user.role})
-          </p>
-        </section>
-      )}
+  return (
+    <Layout sidebar={<UserSidebar user={auth.user} />}>
+      <header className="dash-header">
+        <div>
+          <h1 className="dash-title">{isEditMode ? "Олдвор засах" : "Шинэ олдвор үүсгэх"}</h1>
+          <p className="dash-sub">Талбарыг бөглөж олдворын мэдээллийг системд бүртгэнэ үү.</p>
+        </div>
+        <Link to="/dashboard" className="dash-action ghost">Болих</Link>
+      </header>
 
       {isEditMode && loadStatus === "loading" && (
         <p className="feedback">Олдворын мэдээллийг ачааллаж байна...</p>
@@ -195,115 +207,265 @@ export default function NewArtifactPage() {
         <p className="feedback error">{error || "Мэдээллийг ачаалж чадсангүй."}</p>
       )}
 
-      <form className="info-card upload-form form-wide" onSubmit={handleSubmit}>
-        <h2>{isEditMode ? "Олдворыг засах" : "Шинэ дурсгал нэмэх"}</h2>
-        <div className="form-grid">
-          <div className="field">
-            <label htmlFor="slug">Slug</label>
-            <input
-              id="slug"
-              value={form.slug}
-              onChange={(e) => setForm((c) => ({ ...c, slug: e.target.value }))}
-              disabled={isEditMode}
-            />
+      <form className="artifact-form" onSubmit={handleSubmit}>
+        <section className="form-section">
+          <header className="form-section-header">
+            <span className="form-section-number">1</span>
+            <div>
+              <h2>Үндсэн мэдээлэл</h2>
+              <p>Олдворын нэр, ангилал, он цаг, тайлбарыг оруулна.</p>
+            </div>
+          </header>
+
+          <div className="form-section-body">
+            <div className="field af-full">
+              <label htmlFor="name">Олдворын нэр *</label>
+              <input
+                id="name"
+                value={form.name}
+                onChange={(e) => handleNameChange(e.target.value)}
+                placeholder="Жишээ: Бугатын хөшөө"
+                required
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="category">Төрөл *</label>
+              <select
+                id="category"
+                value={form.category}
+                onChange={(e) => setForm((c) => ({ ...c, category: e.target.value }))}
+                required
+              >
+                <option value="">Сонгоно уу</option>
+                {ARTIFACT_CATEGORIES.map((value) => (
+                  <option key={value} value={value}>{value}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field">
+              <label htmlFor="period">Он цаг *</label>
+              <input
+                id="period"
+                value={form.period}
+                onChange={(e) => setForm((c) => ({ ...c, period: e.target.value }))}
+                placeholder="Жишээ: МЭӨ I мянган"
+                required
+              />
+            </div>
+
+            <div className="field af-full">
+              <label htmlFor="shortDescription">Товч тайлбар *</label>
+              <input
+                id="shortDescription"
+                value={form.shortDescription}
+                onChange={(e) => setForm((c) => ({ ...c, shortDescription: e.target.value }))}
+                placeholder="Карт дээр харагдах нэг өгүүлбэр"
+                required
+              />
+            </div>
+
+            <div className="field af-full">
+              <label htmlFor="description">Дэлгэрэнгүй тайлбар *</label>
+              <textarea
+                id="description"
+                rows="5"
+                value={form.description}
+                onChange={(e) => setForm((c) => ({ ...c, description: e.target.value }))}
+                placeholder="Олдворын түүх, гарал үүсэл, онцлог шинжүүдийг тайлбарлана уу..."
+                required
+              />
+            </div>
+
+            <div className="field af-full">
+              <label htmlFor="tags">Түлхүүр үгс (таг)</label>
+              <input
+                id="tags"
+                value={form.tags}
+                onChange={(e) => setForm((c) => ({ ...c, tags: e.target.value }))}
+                placeholder="бугын хөшөө, хүрлийн үе, чулуу"
+              />
+              <p className="field-help">Таалбарийг таслалаар тусгаарлана уу.</p>
+            </div>
           </div>
-          <div className="field">
-            <label htmlFor="name">Нэр</label>
-            <input id="name" value={form.name} onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))} />
+        </section>
+
+        <section className="form-section">
+          <header className="form-section-header">
+            <span className="form-section-number">2</span>
+            <div>
+              <h2>Газарзүйн байршил</h2>
+              <p>Аймаг, сум сонгоод газрын зурагнаас яг байршлыг товшиж тэмдэглэнэ.</p>
+            </div>
+          </header>
+
+          <div className="form-section-body">
+            <div className="field">
+              <label htmlFor="province">Аймаг / хот *</label>
+              <select
+                id="province"
+                value={form.province}
+                onChange={(e) => setForm((c) => ({ ...c, province: e.target.value }))}
+                required
+              >
+                <option value="">Сонгоно уу</option>
+                {MONGOLIA_PROVINCES.map((value) => (
+                  <option key={value} value={value}>{value}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field">
+              <label htmlFor="location">Сум / газрын нэр *</label>
+              <input
+                id="location"
+                value={form.location}
+                onChange={(e) => setForm((c) => ({ ...c, location: e.target.value }))}
+                placeholder="Жаргалант"
+                required
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="lat">Өргөрөг (Latitude) *</label>
+              <input
+                id="lat"
+                value={form.lat}
+                onChange={(e) => setForm((c) => ({ ...c, lat: e.target.value }))}
+                placeholder="47.5236"
+                required
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="lng">Уртраг (Longitude) *</label>
+              <input
+                id="lng"
+                value={form.lng}
+                onChange={(e) => setForm((c) => ({ ...c, lng: e.target.value }))}
+                placeholder="101.4567"
+                required
+              />
+            </div>
+
+            <div className="field af-full">
+              <MapPicker
+                latitude={form.lat}
+                longitude={form.lng}
+                onChange={handleMapPick}
+              />
+            </div>
           </div>
-          <div className="field">
-            <label htmlFor="nameMn">Монгол нэр</label>
-            <input id="nameMn" value={form.nameMn} onChange={(e) => setForm((c) => ({ ...c, nameMn: e.target.value }))} />
+        </section>
+
+        <section className="form-section">
+          <header className="form-section-header">
+            <span className="form-section-number">3</span>
+            <div>
+              <h2>Зураг ба 3D файл</h2>
+              <p>Гол зураг заавал. 3D файл нэмэлт — администратор фотограмметрийн дараа байршуулж болно.</p>
+            </div>
+          </header>
+
+          <div className="form-section-body">
+            <div className="field af-full">
+              <label htmlFor="imageUrl">Гол зурагны URL *</label>
+              <input
+                id="imageUrl"
+                value={form.imageUrl}
+                onChange={(e) => setForm((c) => ({ ...c, imageUrl: e.target.value }))}
+                placeholder="https://.../main.jpg"
+                required
+              />
+              {form.imageUrl && (
+                <div className="image-preview">
+                  <img src={form.imageUrl} alt="preview" />
+                </div>
+              )}
+            </div>
+
+            <div className="field af-full">
+              <label htmlFor="gallery">Нэмэлт зургуудын URL</label>
+              <input
+                id="gallery"
+                value={form.gallery}
+                onChange={(e) => setForm((c) => ({ ...c, gallery: e.target.value }))}
+                placeholder="https://.../img1.jpg, https://.../img2.jpg"
+              />
+              <p className="field-help">Таслалаар тусгаарлан олон URL оруулж болно.</p>
+            </div>
+
+            <div
+              className={`drop-zone af-full ${imageDragOver ? "is-over" : ""} ${modelFile ? "has-file" : ""}`}
+              onDragOver={(e) => { e.preventDefault(); setImageDragOver(true); }}
+              onDragLeave={() => setImageDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setImageDragOver(false);
+                const file = e.dataTransfer.files?.[0];
+                if (file && (file.name.endsWith(".glb") || file.name.endsWith(".gltf"))) {
+                  setModelFile(file);
+                }
+              }}
+            >
+              <input
+                id="modelFile"
+                type="file"
+                accept=".glb,.gltf,model/gltf-binary,model/gltf+json"
+                onChange={(event) => setModelFile(event.target.files?.[0] || null)}
+                hidden
+              />
+              <label htmlFor="modelFile" className="drop-zone-label">
+                <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                {modelFile ? (
+                  <>
+                    <strong>{modelFile.name}</strong>
+                    <span>Дахин сонгох бол энд дарна</span>
+                  </>
+                ) : (
+                  <>
+                    <strong>3D файл (нэмэлт)</strong>
+                    <span>.glb эсвэл .gltf формат · 150MB хүртэл. Хоосон үлдээж болно — фотограмметрийн дараа админ оруулна.</span>
+                  </>
+                )}
+              </label>
+            </div>
+
+            <div className="field af-full">
+              <label htmlFor="modelUrl">Эсвэл бэлэн URL (нэмэлт)</label>
+              <input
+                id="modelUrl"
+                value={form.modelUrl}
+                onChange={(e) => setForm((c) => ({ ...c, modelUrl: e.target.value }))}
+                placeholder="https://.../artifact.glb (хоосон үлдээж болно)"
+              />
+            </div>
+
+            {uploadStatus === "uploading" && (
+              <p className="feedback af-full">3D файл байршуулж байна...</p>
+            )}
           </div>
-          <div className="field">
-            <label htmlFor="category">Ангилал</label>
-            <input id="category" value={form.category} onChange={(e) => setForm((c) => ({ ...c, category: e.target.value }))} />
-          </div>
-          <div className="field">
-            <label htmlFor="period">Он цагийн үе</label>
-            <input id="period" value={form.period} onChange={(e) => setForm((c) => ({ ...c, period: e.target.value }))} />
-          </div>
-          <div className="field">
-            <label htmlFor="province">Аймаг</label>
-            <input id="province" value={form.province} onChange={(e) => setForm((c) => ({ ...c, province: e.target.value }))} />
-          </div>
-          <div className="field">
-            <label htmlFor="location">Байршил</label>
-            <input id="location" value={form.location} onChange={(e) => setForm((c) => ({ ...c, location: e.target.value }))} />
-          </div>
-          <div className="field">
-            <label htmlFor="lat">Өргөрөг</label>
-            <input id="lat" value={form.lat} onChange={(e) => setForm((c) => ({ ...c, lat: e.target.value }))} />
-          </div>
-          <div className="field">
-            <label htmlFor="lng">Уртраг</label>
-            <input id="lng" value={form.lng} onChange={(e) => setForm((c) => ({ ...c, lng: e.target.value }))} />
-          </div>
-          <div className="field">
-            <label htmlFor="imageUrl">Зураг URL</label>
-            <input id="imageUrl" value={form.imageUrl} onChange={(e) => setForm((c) => ({ ...c, imageUrl: e.target.value }))} />
-          </div>
-          <div className="field">
-            <label htmlFor="modelFile">3D файл upload</label>
-            <input
-              id="modelFile"
-              type="file"
-              accept=".glb,.gltf,model/gltf-binary,model/gltf+json"
-              onChange={(event) => setModelFile(event.target.files?.[0] || null)}
-            />
-            <p className="field-help">`.glb` эсвэл `.gltf` файл сонгоно.</p>
-          </div>
-          <div className="field">
-            <label htmlFor="modelUrl">Эсвэл бэлэн GLB / GLTF URL</label>
-            <input
-              id="modelUrl"
-              value={form.modelUrl}
-              onChange={(e) => setForm((c) => ({ ...c, modelUrl: e.target.value }))}
-              placeholder="https://.../artifact.glb"
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="gallery">Gallery URL-ууд</label>
-            <input id="gallery" value={form.gallery} onChange={(e) => setForm((c) => ({ ...c, gallery: e.target.value }))} placeholder="url1, url2" />
-          </div>
-          <div className="field">
-            <label htmlFor="tags">Түлхүүр үгс</label>
-            <input id="tags" value={form.tags} onChange={(e) => setForm((c) => ({ ...c, tags: e.target.value }))} placeholder="чулуу, дурсгал, өв" />
-          </div>
+        </section>
+
+        <div className="artifact-form-actions">
+          <Link to="/dashboard" className="dash-action ghost">Цуцлах</Link>
+          <button type="submit" className="dash-action submit" disabled={formDisabled}>
+            {submitting
+              ? "Файл байршуулж байна..."
+              : isEditMode
+                ? "Хадгалах"
+                : "Бүртгэх"}
+          </button>
         </div>
 
-        {modelFile && (
-          <div className="selected-files">
-            <span>{modelFile.name}</span>
-          </div>
-        )}
-
-        {uploadStatus === "uploading" && <p className="feedback">3D файл байршуулж байна...</p>}
-
-        <div className="field">
-          <label htmlFor="shortDescription">Товч тайлбар</label>
-          <textarea id="shortDescription" rows="3" value={form.shortDescription} onChange={(e) => setForm((c) => ({ ...c, shortDescription: e.target.value }))} />
-        </div>
-        <div className="field">
-          <label htmlFor="description">Дэлгэрэнгүй тайлбар</label>
-          <textarea id="description" rows="5" value={form.description} onChange={(e) => setForm((c) => ({ ...c, description: e.target.value }))} />
-        </div>
-
-        <button
-          type="submit"
-          className="action-button"
-          disabled={formDisabled}
-        >
-          {submitting
-            ? "Файл байршуулж байна..."
-            : isEditMode
-              ? "Хадгалах"
-              : "Шинэ дурсгал бүртгэх"}
-        </button>
+        {message && <p className="feedback">{message}</p>}
+        {error && <p className="feedback error">{error}</p>}
       </form>
-
-      {message && <p className="feedback">{message}</p>}
-      {error && <p className="feedback error">{error}</p>}
     </Layout>
   );
 }
