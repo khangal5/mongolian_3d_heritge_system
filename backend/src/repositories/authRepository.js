@@ -151,3 +151,125 @@ export async function deleteSessionByTokenHash(tokenHash) {
     [tokenHash]
   );
 }
+
+export async function createEmailVerification({ id, userId, tokenHash, email, expiresAt }) {
+  await query(
+    `
+      INSERT INTO email_verifications (id, user_id, token_hash, email, expires_at)
+      VALUES ($1, $2, $3, LOWER($4), $5)
+    `,
+    [id, userId, tokenHash, email, expiresAt]
+  );
+}
+
+export async function findEmailVerificationByTokenHash(tokenHash) {
+  const result = await query(
+    `
+      SELECT *
+      FROM email_verifications
+      WHERE token_hash = $1
+      LIMIT 1
+    `,
+    [tokenHash]
+  );
+
+  return result.rows[0] || null;
+}
+
+export async function consumeEmailVerification(id) {
+  await query(
+    `
+      UPDATE email_verifications
+      SET consumed_at = NOW()
+      WHERE id = $1
+    `,
+    [id]
+  );
+}
+
+export async function deletePendingVerificationsForUser(userId) {
+  await query(
+    `
+      DELETE FROM email_verifications
+      WHERE user_id = $1 AND consumed_at IS NULL
+    `,
+    [userId]
+  );
+}
+
+export async function setUserVerificationStatus(userId, status) {
+  await query(
+    `
+      UPDATE users
+      SET verification_status = $2,
+          updated_at = NOW()
+      WHERE id = $1
+    `,
+    [userId, status]
+  );
+}
+
+export async function listResearchersWithVerifications() {
+  const result = await query(
+    `
+      SELECT
+        u.id,
+        u.full_name,
+        u.email,
+        u.institution_email,
+        u.role,
+        u.organization,
+        u.department_name,
+        u.position_title,
+        u.phone_number,
+        u.employee_code,
+        u.research_focus,
+        u.verification_document_name,
+        u.verification_document_url,
+        u.verification_status,
+        u.status,
+        u.created_at,
+        u.updated_at,
+        (
+          SELECT json_agg(
+            json_build_object(
+              'id', ev.id,
+              'email', ev.email,
+              'createdAt', ev.created_at,
+              'expiresAt', ev.expires_at,
+              'consumedAt', ev.consumed_at
+            )
+            ORDER BY ev.created_at DESC
+          )
+          FROM email_verifications ev
+          WHERE ev.user_id = u.id
+        ) AS verifications
+      FROM users u
+      WHERE u.role = 'researcher'
+      ORDER BY
+        CASE u.verification_status WHEN 'submitted' THEN 0 ELSE 1 END,
+        u.created_at DESC
+    `
+  );
+
+  return result.rows.map((row) => ({
+    id: row.id,
+    fullName: row.full_name,
+    email: row.email,
+    institutionEmail: row.institution_email,
+    role: row.role,
+    organization: row.organization,
+    departmentName: row.department_name,
+    positionTitle: row.position_title,
+    phoneNumber: row.phone_number,
+    employeeCode: row.employee_code,
+    researchFocus: row.research_focus,
+    verificationDocumentName: row.verification_document_name,
+    verificationDocumentUrl: row.verification_document_url,
+    verificationStatus: row.verification_status,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    verifications: row.verifications || []
+  }));
+}
