@@ -21,6 +21,13 @@ const searchColumnsByField = {
   tags: ["tags::text"]
 };
 
+export const ARTIFACT_STATUSES = Object.freeze({
+  NEW: "NEW",
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED"
+});
+
 function mapArtifact(row) {
   return {
     id: row.id,
@@ -43,7 +50,12 @@ function mapArtifact(row) {
     modelEmbedUrl: row.model_embed_url,
     tags: row.tags,
     status: row.status,
-    createdByUserId: row.created_by_user_id || null
+    createdByUserId: row.created_by_user_id || null,
+    reviewedByUserId: row.reviewed_by_user_id || null,
+    reviewedAt: row.reviewed_at || null,
+    reviewNote: row.review_note || null,
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null
   };
 }
 
@@ -52,10 +64,16 @@ export async function getArtifacts({
   searchBy = "all",
   category = "",
   province = "",
-  includeItems = true
+  includeItems = true,
+  status = ARTIFACT_STATUSES.APPROVED
 } = {}) {
   const params = [];
   const conditions = [];
+
+  if (status) {
+    params.push(status);
+    conditions.push(`status = $${params.length}`);
+  }
 
   if (q) {
     const columns = searchColumnsByField[searchBy] || searchColumnsByField.all;
@@ -89,46 +107,52 @@ export async function getArtifacts({
       )
     : { rows: [], rowCount: 0 };
 
-  const filterResult = await query(`
-    SELECT
-      ARRAY(
-        SELECT DISTINCT COALESCE(NULLIF(name_mn, ''), name) AS item
-        FROM artifacts
-        WHERE COALESCE(NULLIF(name_mn, ''), name) IS NOT NULL
-          AND COALESCE(NULLIF(name_mn, ''), name) <> ''
-        ORDER BY item
-      ) AS names,
-      ARRAY(
-        SELECT DISTINCT category
-        FROM artifacts
-        WHERE category IS NOT NULL AND category <> ''
-        ORDER BY category
-      ) AS categories,
-      ARRAY(
-        SELECT DISTINCT period
-        FROM artifacts
-        WHERE period IS NOT NULL AND period <> ''
-        ORDER BY period
-      ) AS periods,
-      ARRAY(
-        SELECT DISTINCT province
-        FROM artifacts
-        WHERE province IS NOT NULL AND province <> ''
-        ORDER BY province
-      ) AS provinces,
-      ARRAY(
-        SELECT DISTINCT location
-        FROM artifacts
-        WHERE location IS NOT NULL AND location <> ''
-        ORDER BY location
-      ) AS locations,
-      ARRAY(
-        SELECT DISTINCT tag
-        FROM artifacts
-        CROSS JOIN LATERAL jsonb_array_elements_text(tags) AS tag
-        ORDER BY tag
-      ) AS tags
-  `);
+  const facetStatus = status || ARTIFACT_STATUSES.APPROVED;
+  const filterResult = await query(
+    `
+      SELECT
+        ARRAY(
+          SELECT DISTINCT COALESCE(NULLIF(name_mn, ''), name) AS item
+          FROM artifacts
+          WHERE status = $1
+            AND COALESCE(NULLIF(name_mn, ''), name) IS NOT NULL
+            AND COALESCE(NULLIF(name_mn, ''), name) <> ''
+          ORDER BY item
+        ) AS names,
+        ARRAY(
+          SELECT DISTINCT category
+          FROM artifacts
+          WHERE status = $1 AND category IS NOT NULL AND category <> ''
+          ORDER BY category
+        ) AS categories,
+        ARRAY(
+          SELECT DISTINCT period
+          FROM artifacts
+          WHERE status = $1 AND period IS NOT NULL AND period <> ''
+          ORDER BY period
+        ) AS periods,
+        ARRAY(
+          SELECT DISTINCT province
+          FROM artifacts
+          WHERE status = $1 AND province IS NOT NULL AND province <> ''
+          ORDER BY province
+        ) AS provinces,
+        ARRAY(
+          SELECT DISTINCT location
+          FROM artifacts
+          WHERE status = $1 AND location IS NOT NULL AND location <> ''
+          ORDER BY location
+        ) AS locations,
+        ARRAY(
+          SELECT DISTINCT tag
+          FROM artifacts
+          CROSS JOIN LATERAL jsonb_array_elements_text(tags) AS tag
+          WHERE status = $1
+          ORDER BY tag
+        ) AS tags
+    `,
+    [facetStatus]
+  );
 
   return {
     items: itemsResult.rows.map(mapArtifact),
@@ -142,6 +166,42 @@ export async function getArtifacts({
       tags: filterResult.rows[0]?.tags || []
     }
   };
+}
+
+export async function getArtifactsByOwner(ownerId) {
+  const result = await query(
+    `
+      SELECT *
+      FROM artifacts
+      WHERE created_by_user_id = $1
+      ORDER BY
+        CASE status
+          WHEN 'NEW' THEN 0
+          WHEN 'PENDING' THEN 1
+          WHEN 'REJECTED' THEN 2
+          WHEN 'APPROVED' THEN 3
+          ELSE 4
+        END,
+        updated_at DESC
+    `,
+    [ownerId]
+  );
+
+  return result.rows.map(mapArtifact);
+}
+
+export async function getArtifactsByStatus(status) {
+  const result = await query(
+    `
+      SELECT *
+      FROM artifacts
+      WHERE status = $1
+      ORDER BY updated_at ASC
+    `,
+    [status]
+  );
+
+  return result.rows.map(mapArtifact);
 }
 
 export async function getArtifactBySlug(slug) {
@@ -264,6 +324,28 @@ export async function updateArtifact(slug, artifact) {
       JSON.stringify(artifact.tags),
       artifact.status
     ]
+  );
+
+  if (!result.rowCount) {
+    return null;
+  }
+
+  return mapArtifact(result.rows[0]);
+}
+
+export async function setArtifactStatus(slug, { status, reviewerId = null, reviewNote = null }) {
+  const result = await query(
+    `
+      UPDATE artifacts
+      SET status = $2,
+          reviewed_by_user_id = $3,
+          reviewed_at = CASE WHEN $3 IS NULL THEN reviewed_at ELSE NOW() END,
+          review_note = COALESCE($4, review_note),
+          updated_at = NOW()
+      WHERE slug = $1
+      RETURNING *
+    `,
+    [slug, status, reviewerId, reviewNote]
   );
 
   if (!result.rowCount) {

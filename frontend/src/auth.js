@@ -17,3 +17,13 @@ export function clearStoredAuth() {
   window.localStorage.removeItem(AUTH_STORAGE_KEY);
 }
 
+export function updateStoredUser(user) {
+  const current = getStoredAuth();
+  if (!current) {
+    return null;
+  }
+  const next = { ...current, user };
+  setStoredAuth(next);
+  return next;
+}
+

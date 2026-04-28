@@ -76,3 +76,26 @@ export function requireRole(...roles) {
     return next();
   };
 }
+
+export function requireVerifiedResearcher(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ message: "Нэвтэрсэн хэрэглэгч шаардлагатай" });
+  }
+
+  if (req.user.role === "admin") {
+    return next();
+  }
+
+  if (req.user.role !== "researcher") {
+    return res.status(403).json({ message: "Энэ үйлдэлд таны эрх хүрэхгүй байна" });
+  }
+
+  if (req.user.verificationStatus !== "verified") {
+    return res.status(403).json({
+      message:
+        "Эхлээд албан имэйл рүү илгээсэн холбоосыг дарж имэйлээ баталгаажуулна уу"
+    });
+  }
+
+  return next();
+}

@@ -53,13 +53,48 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
   last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS email_verifications (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  email TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  consumed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_verifications_user_id
+  ON email_verifications (user_id);
+
 ALTER TABLE artifacts
   ADD COLUMN IF NOT EXISTS created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS model_url TEXT;
 
+UPDATE artifacts
+  SET status = 'APPROVED'
+  WHERE status IN ('нийтлэгдсэн', 'published', 'approved');
+
+UPDATE artifacts
+  SET status = 'NEW'
+  WHERE status NOT IN ('NEW', 'PENDING', 'APPROVED', 'REJECTED');
+
+ALTER TABLE artifacts ALTER COLUMN status SET DEFAULT 'NEW';
+
+ALTER TABLE artifacts DROP CONSTRAINT IF EXISTS artifacts_status_check;
+ALTER TABLE artifacts
+  ADD CONSTRAINT artifacts_status_check
+  CHECK (status IN ('NEW', 'PENDING', 'APPROVED', 'REJECTED'));
+
+ALTER TABLE artifacts
+  ADD COLUMN IF NOT EXISTS reviewed_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS review_note TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_artifacts_slug ON artifacts (slug);
 CREATE INDEX IF NOT EXISTS idx_artifacts_category ON artifacts (category);
 CREATE INDEX IF NOT EXISTS idx_artifacts_province ON artifacts (province);
+CREATE INDEX IF NOT EXISTS idx_artifacts_status ON artifacts (status);
+CREATE INDEX IF NOT EXISTS idx_artifacts_created_by ON artifacts (created_by_user_id);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
 CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id ON auth_sessions (user_id);
 

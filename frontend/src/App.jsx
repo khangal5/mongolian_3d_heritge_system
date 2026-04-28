@@ -7,6 +7,10 @@ const ReconstructionLabPage = lazy(() => import("./pages/ReconstructionLabPage.j
 const LoginPage = lazy(() => import("./pages/LoginPage.jsx"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage.jsx"));
 const NewArtifactPage = lazy(() => import("./pages/NewArtifactPage.jsx"));
+const DashboardPage = lazy(() => import("./pages/DashboardPage.jsx"));
+const AdminQueuePage = lazy(() => import("./pages/AdminQueuePage.jsx"));
+const AdminResearchersPage = lazy(() => import("./pages/AdminResearchersPage.jsx"));
+const VerifyEmailPage = lazy(() => import("./pages/VerifyEmailPage.jsx"));
 
 function RouteFallback() {
   return <p className="feedback">Хуудсыг ачааллаж байна...</p>;
@@ -19,8 +23,13 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="/artifacts/:slug" element={<ArtifactDetailPage />} />
         <Route path="/artifacts/new" element={<NewArtifactPage />} />
+        <Route path="/artifacts/:slug/edit" element={<NewArtifactPage />} />
+        <Route path="/artifacts/:slug" element={<ArtifactDetailPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/admin/queue" element={<AdminQueuePage />} />
+        <Route path="/admin/researchers" element={<AdminResearchersPage />} />
         <Route path="/reconstruction-lab" element={<ReconstructionLabPage />} />
       </Routes>
     </Suspense>

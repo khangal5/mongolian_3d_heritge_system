@@ -7,7 +7,16 @@ async function request(path) {
   });
 
   if (!response.ok) {
-    throw new Error(`Request failed with status ${response.status}`);
+    let message = `Request failed with status ${response.status}`;
+
+    try {
+      const data = await response.json();
+      message = data.message || message;
+    } catch {
+      // Ignore non-JSON error responses.
+    }
+
+    throw new Error(message);
   }
 
   return response.json();
@@ -119,6 +128,45 @@ export function logout() {
   });
 }
 
+export function verifyEmail(token) {
+  return requestWithOptions("/auth/verify-email", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token })
+  });
+}
+
+export function resendVerificationEmail() {
+  return requestWithOptions("/auth/resend-verification", {
+    method: "POST",
+    headers: buildAuthHeaders()
+  });
+}
+
+export function getAdminResearchers() {
+  return request("/auth/admin/researchers");
+}
+
+export function verifyResearcherManually(id) {
+  return requestWithOptions(`/auth/admin/researchers/${id}/verify`, {
+    method: "POST",
+    headers: buildAuthHeaders()
+  });
+}
+
+export function revokeResearcherVerification(id) {
+  return requestWithOptions(`/auth/admin/researchers/${id}/revoke`, {
+    method: "POST",
+    headers: buildAuthHeaders()
+  });
+}
+
+export function buildUploadUrl(pathname) {
+  if (!pathname) return null;
+  if (pathname.startsWith("http")) return pathname;
+  return `${API_BASE_URL.replace(/\/api$/, "")}${pathname}`;
+}
+
 export function createArtifactRequest(payload) {
   return requestWithOptions("/artifacts", {
     method: "POST",
@@ -127,5 +175,68 @@ export function createArtifactRequest(payload) {
       ...buildAuthHeaders()
     },
     body: JSON.stringify(payload)
+  });
+}
+
+export function getMyArtifacts() {
+  return request("/artifacts/mine");
+}
+
+export function getAdminQueue(status = "PENDING") {
+  const search = new URLSearchParams({ status });
+  return request(`/artifacts/admin/queue?${search.toString()}`);
+}
+
+export function submitArtifact(slug) {
+  return requestWithOptions(`/artifacts/${slug}/submit`, {
+    method: "POST",
+    headers: buildAuthHeaders()
+  });
+}
+
+export function revertArtifact(slug) {
+  return requestWithOptions(`/artifacts/${slug}/revert`, {
+    method: "POST",
+    headers: buildAuthHeaders()
+  });
+}
+
+export function updateArtifactRequest(slug, payload) {
+  return requestWithOptions(`/artifacts/${slug}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...buildAuthHeaders()
+    },
+    body: JSON.stringify(payload)
+  });
+}
+
+export function approveArtifact(slug, note = "") {
+  return requestWithOptions(`/artifacts/${slug}/approve`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...buildAuthHeaders()
+    },
+    body: JSON.stringify({ note })
+  });
+}
+
+export function rejectArtifact(slug, note) {
+  return requestWithOptions(`/artifacts/${slug}/reject`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...buildAuthHeaders()
+    },
+    body: JSON.stringify({ note })
+  });
+}
+
+export function deleteArtifactRequest(slug) {
+  return requestWithOptions(`/artifacts/${slug}`, {
+    method: "DELETE",
+    headers: buildAuthHeaders()
   });
 }
