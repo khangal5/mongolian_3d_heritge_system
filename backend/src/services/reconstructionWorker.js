@@ -1,29 +1,17 @@
-import { getReconstructionJobById, updateReconstructionJob } from "../repositories/reconstructionRepository.js";
+import {
+  getReconstructionJobById,
+  updateReconstructionJob
+} from "../repositories/reconstructionRepository.js";
+import {
+  analyzePhotoSet,
+  estimateQualityFromReport,
+  summarizeReport
+} from "../utils/imageQuality.js";
 
 const activeJobs = new Set();
 
 function appendLog(log, entry) {
   return [...(log || []), { createdAt: new Date().toISOString(), ...entry }];
-}
-
-function estimateQuality(imageCount) {
-  if (imageCount >= 30) {
-    return "өндөр";
-  }
-  if (imageCount >= 16) {
-    return "дунд";
-  }
-  return "бага";
-}
-
-function buildSummary(imageCount) {
-  if (imageCount >= 30) {
-    return "Зургийн тоо хангалттай байна. Бодит photogrammetry engine холбоход сайн туршилтын багц байна.";
-  }
-  if (imageCount >= 16) {
-    return "Зургийн тоо боломжийн байна. Гэрэл ба өнцгийн тогтвортой байдлыг сайжруулбал reconstruction чанар нэмэгдэнэ.";
-  }
-  return "Зургийн тоо цөөн байна. Илүү олон өнцгөөс дахин зураг авахыг зөвлөж байна.";
 }
 
 export async function enqueueReconstruction(jobId) {
@@ -43,60 +31,57 @@ export async function enqueueReconstruction(jobId) {
 
     await updateReconstructionJob(jobId, {
       status: "processing",
-      stage: "feature_matching",
-      progressPercent: 20,
+      stage: "image_analysis",
+      progressPercent: 15,
       startedAt: new Date().toISOString(),
-      photoSetStatus: "боловсруулж байна",
+      photoSetStatus: "шалгаж байна",
       processingLog: appendLog(current.processingLog, {
-        stage: "feature_matching",
-        message: "Онцлог цэгүүд илрүүлэх шат эхэллээ."
+        stage: "image_analysis",
+        message: `${current.images.length} зургийн чанарын шалгалт эхэллээ.`
       })
     });
 
-    setTimeout(async () => {
-      const mid = await getReconstructionJobById(jobId);
+    const report = await analyzePhotoSet(current.images);
+    const summary = summarizeReport(report);
+    const quality = estimateQualityFromReport(report);
 
-      if (!mid) {
-        activeJobs.delete(jobId);
-        return;
-      }
+    const findingsLog = appendLog(current.processingLog, {
+      stage: "image_analysis",
+      message: `${current.images.length} зургийн чанарын шалгалт эхэллээ.`
+    });
 
-      await updateReconstructionJob(jobId, {
-        stage: "dense_reconstruction",
-        progressPercent: 55,
-        processingLog: appendLog(mid.processingLog, {
-          stage: "dense_reconstruction",
-          message: "Point cloud болон surface reconstruction шат симуляци хийгдэж байна."
-        })
+    findingsLog.push({
+      createdAt: new Date().toISOString(),
+      stage: "report_ready",
+      message: summary,
+      findings: report
+    });
+
+    const failingImages = report.perImage
+      .filter((r) => !r.ok)
+      .slice(0, 8)
+      .map((r) => `${r.name}: ${(r.issues || []).join("; ")}`);
+
+    if (failingImages.length) {
+      findingsLog.push({
+        createdAt: new Date().toISOString(),
+        stage: "image_issues",
+        message: failingImages.join(" | ")
       });
+    }
 
-      setTimeout(async () => {
-        const last = await getReconstructionJobById(jobId);
-
-        if (!last) {
-          activeJobs.delete(jobId);
-          return;
-        }
-
-        await updateReconstructionJob(jobId, {
-          status: "completed",
-          stage: "report_ready",
-          progressPercent: 100,
-          estimatedQuality: estimateQuality(last.photoSet.imageCount),
-          resultSummary: buildSummary(last.photoSet.imageCount),
-          generatedFormat: "GLB (санал болгох формат)",
-          generatedModelUrl: null,
-          completedAt: new Date().toISOString(),
-          photoSetStatus: "туршилт дууссан",
-          processingLog: appendLog(last.processingLog, {
-            stage: "report_ready",
-            message: "Туршилтын тайлан бэлэн боллоо. Одоо бодит engine холбоход бэлэн."
-          })
-        });
-
-        activeJobs.delete(jobId);
-      }, 3000);
-    }, 2500);
+    await updateReconstructionJob(jobId, {
+      status: "completed",
+      stage: "report_ready",
+      progressPercent: 100,
+      estimatedQuality: quality,
+      resultSummary: summary,
+      generatedFormat: "Чанарын тайлан (3D mesh үүсгээгүй)",
+      generatedModelUrl: null,
+      completedAt: new Date().toISOString(),
+      photoSetStatus: report.okCount === report.total ? "шалгалт амжилттай" : "анхаарах зүйлтэй",
+      processingLog: findingsLog
+    });
   } catch (error) {
     const failed = await getReconstructionJobById(jobId);
     await updateReconstructionJob(jobId, {
@@ -108,7 +93,7 @@ export async function enqueueReconstruction(jobId) {
         message: `Алдаа гарлаа: ${error.message}`
       })
     });
+  } finally {
     activeJobs.delete(jobId);
   }
 }
-

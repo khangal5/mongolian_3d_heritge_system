@@ -168,30 +168,97 @@ export default function ReconstructionLabPage() {
       <section className="job-list">
         <h2>Reconstruction job-ууд</h2>
         <div className="job-cards">
-          {jobs.map((job) => (
-            <article className="job-card" key={job.id}>
-              <div className="artifact-meta-row">
-                <span>{job.photoSet.title}</span>
-                <span>{job.status}</span>
-              </div>
-              <h3>{job.stage}</h3>
-              <p>{job.resultSummary || "Тайлан хүлээгдэж байна."}</p>
-              <div className="progress-track">
-                <div className="progress-fill" style={{ width: `${job.progressPercent}%` }} />
-              </div>
-              <div className="job-metadata">
-                <span>{job.photoSet.imageCount} зураг</span>
-                <span>Чанар: {job.estimatedQuality}</span>
-              </div>
-              <div className="log-list">
-                {job.processingLog.slice(-3).map((entry) => (
-                  <p key={`${job.id}-${entry.createdAt}-${entry.stage}`}>
-                    <strong>{entry.stage}:</strong> {entry.message}
-                  </p>
-                ))}
-              </div>
-            </article>
-          ))}
+          {jobs.map((job) => {
+            const findingsEntry = [...job.processingLog]
+              .reverse()
+              .find((entry) => entry.findings);
+            const findings = findingsEntry?.findings;
+
+            return (
+              <article className="job-card" key={job.id}>
+                <div className="artifact-meta-row">
+                  <span>{job.photoSet.title}</span>
+                  <span>{job.status}</span>
+                </div>
+                <h3>{job.stage}</h3>
+                <p>{job.resultSummary || "Тайлан хүлээгдэж байна."}</p>
+                <div className="progress-track">
+                  <div className="progress-fill" style={{ width: `${job.progressPercent}%` }} />
+                </div>
+                <div className="job-metadata">
+                  <span>{job.photoSet.imageCount} зураг</span>
+                  <span>Чанар: {job.estimatedQuality}</span>
+                </div>
+
+                {findings && (
+                  <div className="quality-report">
+                    <div className="quality-stats">
+                      <div className="quality-stat">
+                        <span>OK</span>
+                        <strong>{findings.okCount}/{findings.total}</strong>
+                      </div>
+                      <div className="quality-stat">
+                        <span>Дундаж MP</span>
+                        <strong>{findings.avgMegapixels}</strong>
+                      </div>
+                      <div className="quality-stat">
+                        <span>Гэрэлт байдал</span>
+                        <strong>{findings.avgBrightness}</strong>
+                      </div>
+                    </div>
+                    {(findings.issues.blurry +
+                      findings.issues.dark +
+                      findings.issues.overexposed +
+                      findings.issues.lowRes +
+                      findings.issues.unread >
+                      0) && (
+                      <ul className="quality-issue-summary">
+                        {findings.issues.blurry > 0 && (
+                          <li>{findings.issues.blurry} blur их</li>
+                        )}
+                        {findings.issues.dark > 0 && (
+                          <li>{findings.issues.dark} харанхуй</li>
+                        )}
+                        {findings.issues.overexposed > 0 && (
+                          <li>{findings.issues.overexposed} цайвар</li>
+                        )}
+                        {findings.issues.lowRes > 0 && (
+                          <li>{findings.issues.lowRes} resolution бага</li>
+                        )}
+                        {findings.issues.unread > 0 && (
+                          <li>{findings.issues.unread} уншигдсангүй</li>
+                        )}
+                      </ul>
+                    )}
+                    {findings.perImage?.some((p) => !p.ok) && (
+                      <details className="quality-details">
+                        <summary>Анхаарах зургуудыг харах</summary>
+                        <ul>
+                          {findings.perImage
+                            .filter((p) => !p.ok)
+                            .slice(0, 12)
+                            .map((p) => (
+                              <li key={p.id}>
+                                <strong>{p.name}</strong>:{" "}
+                                <span>{(p.issues || []).join("; ")}</span>
+                              </li>
+                            ))}
+                        </ul>
+                      </details>
+                    )}
+                  </div>
+                )}
+
+                <div className="log-list">
+                  {job.processingLog.slice(-3).map((entry) => (
+                    <p key={`${job.id}-${entry.createdAt}-${entry.stage}`}>
+                      <strong>{entry.stage}:</strong> {entry.message}
+                    </p>
+                  ))}
+                </div>
+              </article>
+            );
+          })}
         </div>
       </section>
     </Layout>
