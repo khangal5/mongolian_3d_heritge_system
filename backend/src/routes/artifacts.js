@@ -80,8 +80,7 @@ function validateArtifactPayload(artifact) {
     artifact.location,
     artifact.shortDescription,
     artifact.description,
-    artifact.imageUrl,
-    artifact.modelUrl
+    artifact.imageUrl
   ];
 
   if (requiredFields.some((field) => !field)) {
@@ -92,7 +91,9 @@ function validateArtifactPayload(artifact) {
     return "Координатын утга буруу байна";
   }
 
-  if (!isSupportedModelUrl(artifact.modelUrl)) {
+  // 3D model is optional (admin uploads after photogrammetry).
+  // Only validate format if a URL was provided.
+  if (artifact.modelUrl && !isSupportedModelUrl(artifact.modelUrl)) {
     return "3D model URL нь .glb эсвэл .gltf файл руу заасан байх ёстой";
   }
 
@@ -141,6 +142,7 @@ router.get("/", asyncHandler(async (req, res) => {
     province: (req.query.province || "").toString().trim(),
     userLat: Number.isFinite(userLat) ? userLat : null,
     userLng: Number.isFinite(userLng) ? userLng : null,
+    sort: (req.query.sort || "newest").toString().trim(),
     includeItems:
       (req.query.includeItems || "true").toString().trim().toLowerCase() !== "false",
     status: ARTIFACT_STATUSES.APPROVED

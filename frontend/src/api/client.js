@@ -11,8 +11,22 @@ function buildError(response, message) {
   return error;
 }
 
+function networkError() {
+  const error = new Error(
+    "Сервертэй холбогдож чадсангүй. Backend ажиллаж байгаа эсэхээ шалгана уу."
+  );
+  error.status = 0;
+  error.isNetworkError = true;
+  return error;
+}
+
 async function request(path) {
-  const response = await fetch(`${API_BASE_URL}${path}`, DEFAULT_FETCH_OPTIONS);
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, DEFAULT_FETCH_OPTIONS);
+  } catch {
+    throw networkError();
+  }
 
   if (!response.ok) {
     let message = `Request failed with status ${response.status}`;
@@ -31,10 +45,15 @@ async function request(path) {
 }
 
 async function requestWithOptions(path, options) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...DEFAULT_FETCH_OPTIONS,
-    ...options
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...DEFAULT_FETCH_OPTIONS,
+      ...options
+    });
+  } catch {
+    throw networkError();
+  }
 
   if (!response.ok) {
     let message = `Request failed with status ${response.status}`;
@@ -49,6 +68,11 @@ async function requestWithOptions(path, options) {
     throw buildError(response, message);
   }
 
+  const method = (options?.method || "GET").toUpperCase();
+  if (method !== "GET") {
+    cache.clear();
+  }
+
   if (response.status === 204) {
     return null;
   }
@@ -56,7 +80,28 @@ async function requestWithOptions(path, options) {
   return response.json();
 }
 
-export function getArtifacts(params = {}) {
+const cache = new Map();
+const CACHE_TTL_MS = 15000;
+
+function fromCache(key) {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+    cache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function intoCache(key, data) {
+  cache.set(key, { data, timestamp: Date.now() });
+}
+
+export function invalidateCache() {
+  cache.clear();
+}
+
+export async function getArtifacts(params = {}) {
   const search = new URLSearchParams();
 
   Object.entries(params).forEach(([key, value]) => {
@@ -66,11 +111,22 @@ export function getArtifacts(params = {}) {
   });
 
   const suffix = search.toString() ? `?${search.toString()}` : "";
-  return request(`/artifacts${suffix}`);
+  const cacheKey = `artifacts:${suffix}`;
+  const cached = fromCache(cacheKey);
+  if (cached) return cached;
+
+  const data = await request(`/artifacts${suffix}`);
+  intoCache(cacheKey, data);
+  return data;
 }
 
-export function getArtifactBySlug(slug) {
-  return request(`/artifacts/${slug}`);
+export async function getArtifactBySlug(slug) {
+  const cacheKey = `artifact:${slug}`;
+  const cached = fromCache(cacheKey);
+  if (cached) return cached;
+  const data = await request(`/artifacts/${slug}`);
+  intoCache(cacheKey, data);
+  return data;
 }
 
 export function getReconstructionJobs() {

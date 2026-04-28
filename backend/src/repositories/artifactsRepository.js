@@ -122,6 +122,7 @@ export async function getArtifacts({
   province = "",
   userLat = null,
   userLng = null,
+  sort = "newest",
   includeItems = true,
   status = ARTIFACT_STATUSES.APPROVED
 } = {}) {
@@ -161,13 +162,20 @@ export async function getArtifacts({
 
   let orderBy = "ORDER BY a.created_at DESC, a.name ASC";
 
-  if (hasUserLocation) {
+  if (sort === "distance" && hasUserLocation) {
     params.push(Number(userLng));
     const lngParam = `$${params.length}`;
     params.push(Number(userLat));
     const latParam = `$${params.length}`;
     orderBy = `ORDER BY ST_Distance(l.geom, ST_SetSRID(ST_MakePoint(${lngParam}, ${latParam}), 4326)::geography) ASC NULLS LAST`;
+  } else if (sort === "oldest") {
+    orderBy = "ORDER BY a.created_at ASC, a.name ASC";
+  } else if (sort === "name_asc") {
+    orderBy = "ORDER BY COALESCE(NULLIF(a.name_mn, ''), a.name) ASC";
+  } else if (sort === "name_desc") {
+    orderBy = "ORDER BY COALESCE(NULLIF(a.name_mn, ''), a.name) DESC";
   }
+  // default: "newest" → ORDER BY created_at DESC
 
   const itemsResult = includeItems
     ? await query(
@@ -456,9 +464,9 @@ export async function setArtifactStatus(slug, { status, reviewerId = null, revie
     `
       UPDATE artifacts
       SET status = $2,
-          reviewed_by_user_id = $3,
-          reviewed_at = CASE WHEN $3 IS NULL THEN reviewed_at ELSE NOW() END,
-          review_note = COALESCE($4, review_note),
+          reviewed_by_user_id = $3::text,
+          reviewed_at = CASE WHEN $3::text IS NULL THEN reviewed_at ELSE NOW() END,
+          review_note = COALESCE($4::text, review_note),
           updated_at = NOW()
       WHERE slug = $1
     `,
