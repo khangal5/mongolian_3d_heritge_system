@@ -1,7 +1,9 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getArtifactBySlug } from "../api/client.js";
+import { getStoredAuth } from "../auth.js";
 import Layout from "../components/Layout.jsx";
+import StatusBadge from "../components/StatusBadge.jsx";
 
 const ModelViewer = lazy(() => import("../components/ModelViewer.jsx"));
 const ArtifactMap = lazy(() => import("../components/ArtifactMap.jsx"));
@@ -31,6 +33,11 @@ export default function ArtifactDetailPage() {
   const { slug } = useParams();
   const [artifact, setArtifact] = useState(null);
   const [status, setStatus] = useState("loading");
+  const auth = typeof window === "undefined" ? null : getStoredAuth();
+  const canSeeStatus =
+    artifact &&
+    auth?.user &&
+    (auth.user.role === "admin" || auth.user.id === artifact.createdByUserId);
 
   useEffect(() => {
     let ignore = false;
@@ -73,6 +80,16 @@ export default function ArtifactDetailPage() {
                 <span className="eyebrow">{artifact.category}</span>
                 <h1>{artifact.name}</h1>
                 <p className="artifact-card-title-mn">{artifact.nameMn}</p>
+                {canSeeStatus && (
+                  <div className="detail-status-row">
+                    <StatusBadge status={artifact.status} />
+                    {artifact.status === "REJECTED" && artifact.reviewNote && (
+                      <span className="detail-status-note">
+                        Татгалзсан шалтгаан: {artifact.reviewNote}
+                      </span>
+                    )}
+                  </div>
+                )}
                 <p>{artifact.description}</p>
 
                 <div className="detail-meta">
@@ -144,7 +161,9 @@ export default function ArtifactDetailPage() {
                   <ul className="detail-list">
                     <li><span>Өргөрөг</span><strong>{artifact.coordinates.lat}</strong></li>
                     <li><span>Уртраг</span><strong>{artifact.coordinates.lng}</strong></li>
-                    <li><span>Төлөв</span><strong>{artifact.status}</strong></li>
+                    {canSeeStatus && (
+                      <li><span>Төлөв</span><strong><StatusBadge status={artifact.status} /></strong></li>
+                    )}
                     <li><span>Ангилал</span><strong>{artifact.category}</strong></li>
                   </ul>
                 </div>

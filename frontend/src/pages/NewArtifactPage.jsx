@@ -1,5 +1,11 @@
-import { useState } from "react";
-import { createArtifactRequest, uploadArtifactModel } from "../api/client.js";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  createArtifactRequest,
+  getArtifactBySlug,
+  updateArtifactRequest,
+  uploadArtifactModel
+} from "../api/client.js";
 import { getStoredAuth } from "../auth.js";
 import Layout from "../components/Layout.jsx";
 
@@ -21,13 +27,66 @@ const initialForm = {
   tags: ""
 };
 
+function artifactToForm(artifact) {
+  return {
+    slug: artifact.slug || "",
+    name: artifact.name || "",
+    nameMn: artifact.nameMn || "",
+    category: artifact.category || "",
+    period: artifact.period || "",
+    province: artifact.province || "",
+    location: artifact.location || "",
+    lat: artifact.coordinates?.lat ?? "",
+    lng: artifact.coordinates?.lng ?? "",
+    shortDescription: artifact.shortDescription || "",
+    description: artifact.description || "",
+    imageUrl: artifact.imageUrl || "",
+    modelUrl: artifact.modelUrl || artifact.modelEmbedUrl || "",
+    gallery: Array.isArray(artifact.gallery) ? artifact.gallery.join(", ") : "",
+    tags: Array.isArray(artifact.tags) ? artifact.tags.join(", ") : ""
+  };
+}
+
 export default function NewArtifactPage() {
+  const navigate = useNavigate();
+  const { slug: editSlug } = useParams();
+  const isEditMode = Boolean(editSlug);
   const [form, setForm] = useState(initialForm);
   const [modelFile, setModelFile] = useState(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [uploadStatus, setUploadStatus] = useState("idle");
+  const [loadStatus, setLoadStatus] = useState(isEditMode ? "loading" : "idle");
   const auth = typeof window === "undefined" ? null : getStoredAuth();
+
+  useEffect(() => {
+    if (!isEditMode) {
+      return;
+    }
+
+    let ignore = false;
+    setLoadStatus("loading");
+    getArtifactBySlug(editSlug)
+      .then((data) => {
+        if (ignore) return;
+        if (data.status !== "NEW") {
+          setError("Зөвхөн NEW төлөвт байгаа өвийг засах боломжтой.");
+          setLoadStatus("error");
+          return;
+        }
+        setForm(artifactToForm(data));
+        setLoadStatus("success");
+      })
+      .catch((requestError) => {
+        if (ignore) return;
+        setError(requestError.message);
+        setLoadStatus("error");
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [editSlug, isEditMode]);
 
   async function resolveModelUrl() {
     if (!modelFile) {
@@ -52,7 +111,7 @@ export default function NewArtifactPage() {
     try {
       const modelUrl = await resolveModelUrl();
 
-      await createArtifactRequest({
+      const payload = {
         slug: form.slug,
         name: form.name,
         nameMn: form.nameMn || form.name,
@@ -76,26 +135,41 @@ export default function NewArtifactPage() {
           .split(",")
           .map((item) => item.trim())
           .filter(Boolean)
-      });
+      };
 
-      setMessage("Шинэ дурсгал амжилттай бүртгэгдлээ.");
-      setForm(initialForm);
+      if (isEditMode) {
+        await updateArtifactRequest(editSlug, payload);
+        setMessage("Өөрчлөлт хадгалагдлаа. Самбар руу шилжиж байна...");
+      } else {
+        await createArtifactRequest(payload);
+        setMessage("Шинэ дурсгал амжилттай бүртгэгдлээ. Самбар руу шилжиж байна...");
+        setForm(initialForm);
+      }
+
       setModelFile(null);
       setUploadStatus("idle");
+      setTimeout(() => navigate("/dashboard"), 600);
     } catch (requestError) {
       setUploadStatus("error");
       setError(requestError.message);
     }
   }
 
+  const submitting = uploadStatus === "uploading";
+  const formDisabled = !auth?.user || submitting || (isEditMode && loadStatus !== "success");
+
   return (
     <Layout>
       <section className="hero hero-compact">
         <div className="hero-copy">
-          <p className="eyebrow">Шинэ Дурсгал</p>
-          <h1>Судлаач эрхтэй хэрэглэгч шинэ дурсгал нэмнэ.</h1>
+          <p className="eyebrow">{isEditMode ? "Олдвор засах" : "Шинэ Дурсгал"}</p>
+          <h1>
+            {isEditMode
+              ? "NEW төлөвт байгаа олдвороо засаад дахин илгээнэ үү."
+              : "Судлаач эрхтэй хэрэглэгч шинэ дурсгал нэмнэ."}
+          </h1>
           <p className="hero-text">
-            Зураг, тайлбар, 3D файлаа оруулаад бүртгэнэ.
+            Зураг, тайлбар, 3D файлаа оруулаад {isEditMode ? "хадгална." : "бүртгэнэ."}
           </p>
         </div>
       </section>
@@ -114,12 +188,24 @@ export default function NewArtifactPage() {
         </section>
       )}
 
+      {isEditMode && loadStatus === "loading" && (
+        <p className="feedback">Олдворын мэдээллийг ачааллаж байна...</p>
+      )}
+      {isEditMode && loadStatus === "error" && (
+        <p className="feedback error">{error || "Мэдээллийг ачаалж чадсангүй."}</p>
+      )}
+
       <form className="info-card upload-form form-wide" onSubmit={handleSubmit}>
-        <h2>Шинэ дурсгал нэмэх</h2>
+        <h2>{isEditMode ? "Олдворыг засах" : "Шинэ дурсгал нэмэх"}</h2>
         <div className="form-grid">
           <div className="field">
             <label htmlFor="slug">Slug</label>
-            <input id="slug" value={form.slug} onChange={(e) => setForm((c) => ({ ...c, slug: e.target.value }))} />
+            <input
+              id="slug"
+              value={form.slug}
+              onChange={(e) => setForm((c) => ({ ...c, slug: e.target.value }))}
+              disabled={isEditMode}
+            />
           </div>
           <div className="field">
             <label htmlFor="name">Нэр</label>
@@ -206,9 +292,13 @@ export default function NewArtifactPage() {
         <button
           type="submit"
           className="action-button"
-          disabled={!auth?.user || uploadStatus === "uploading"}
+          disabled={formDisabled}
         >
-          {uploadStatus === "uploading" ? "Файл байршуулж байна..." : "Шинэ дурсгал бүртгэх"}
+          {submitting
+            ? "Файл байршуулж байна..."
+            : isEditMode
+              ? "Хадгалах"
+              : "Шинэ дурсгал бүртгэх"}
         </button>
       </form>
 
