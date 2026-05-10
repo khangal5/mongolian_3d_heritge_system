@@ -25,6 +25,11 @@ export class ArtifactController {
     return this.approval.listPending();
   }
 
+  async listByStatus(status) {
+    const { items } = await this.search.search({ status });
+    return items;
+  }
+
   async getBySlug(slug) {
     return this.artifacts.getBySlug(slug);
   }

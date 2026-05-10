@@ -1,12 +1,13 @@
-import {
-  getReconstructionJobById,
-  updateReconstructionJob
-} from "../repositories/reconstructionRepository.js";
+import { reconstructionJobRepository } from "../data/ReconstructionJobRepository.js";
 import {
   analyzePhotoSet,
   estimateQualityFromReport,
   summarizeReport
 } from "../utils/imageQuality.js";
+
+const getReconstructionJobById = (id) => reconstructionJobRepository.findById(id);
+const updateReconstructionJob = (id, patch) =>
+  reconstructionJobRepository.updateStatus(id, patch.status, patch);
 
 const activeJobs = new Set();
 

@@ -1,24 +1,31 @@
-import { reconstructionRepository } from "../data/ReconstructionRepository.js";
+import { photoSetRepository } from "../data/PhotoSetRepository.js";
+import { reconstructionJobRepository } from "../data/ReconstructionJobRepository.js";
 import { analyzePhotoSet, summarizeReport, estimateQualityFromReport } from "../utils/imageQuality.js";
-import { PhotoSet, ReconstructionJob } from "../entities/PhotoSet.js";
 
 export class ReconstructionService {
-  constructor(repo = reconstructionRepository) {
-    this.repo = repo;
+  constructor({
+    photoSets = photoSetRepository,
+    jobs = reconstructionJobRepository
+  } = {}) {
+    this.photoSets = photoSets;
+    this.jobs = jobs;
   }
 
   async listJobs() {
-    const rows = await this.repo.listJobs();
-    return rows.map((row) => new ReconstructionJob(row));
+    return this.jobs.findAll();
   }
 
   async getJobById(id) {
-    const row = await this.repo.findJobById(id);
-    return row ? new ReconstructionJob(row) : null;
+    return this.jobs.findById(id);
   }
 
   async submitPhotoSet({ photoSet, images, job, createdByUserId }) {
-    return this.repo.createPhotoSetWithJob({ photoSet, images, job, createdByUserId });
+    return this.photoSets.save({
+      ...photoSet,
+      images,
+      job,
+      userId: createdByUserId
+    });
   }
 
   async analyzeImages(images) {
@@ -31,8 +38,7 @@ export class ReconstructionService {
   }
 
   async updateJobStatus(id, patch) {
-    const row = await this.repo.updateJob(id, patch);
-    return row ? new ReconstructionJob(row) : null;
+    return this.jobs.updateStatus(id, patch.status, patch);
   }
 }
 
