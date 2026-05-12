@@ -2,20 +2,14 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { Router } from "express";
 import { config } from "../config/env.js";
-import {
-  ARTIFACT_STATUSES,
-  createArtifact,
-  deleteArtifact,
-  getArtifactBySlug,
-  getArtifacts,
-  getArtifactsByOwner,
-  getArtifactsByStatus,
-  setArtifactStatus,
-  updateArtifact
-} from "../repositories/artifactsRepository.js";
+import { ArtifactStatus as ARTIFACT_STATUSES } from "../entities/Artifact.js";
 import { requireAuth, requireRole, requireVerifiedResearcher } from "../middleware/auth.js";
 import { createUploadHandler } from "../utils/upload.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { artifactController } from "../controllers/ArtifactController.js";
+import { adminController } from "../controllers/AdminController.js";
+import { mediaService } from "../services/MediaService.js";
+import { locationService } from "../services/LocationService.js";
 
 const router = Router();
 
@@ -165,7 +159,7 @@ router.get("/", asyncHandler(async (req, res) => {
     : has3dRaw === "0" || has3dRaw === "false" ? false
     : null;
 
-  const data = await getArtifacts({
+  const data = await artifactController.list({
     q: (req.query.q || "").toString().trim(),
     searchBy: (req.query.searchBy || "all").toString().trim(),
     category: (req.query.category || "").toString().trim(),
@@ -183,7 +177,7 @@ router.get("/", asyncHandler(async (req, res) => {
 }));
 
 router.get("/mine", requireRole("researcher", "admin"), asyncHandler(async (req, res) => {
-  const items = await getArtifactsByOwner(req.user.id);
+  const items = await artifactController.listOwn(req.user.id);
   res.json({ items, total: items.length });
 }));
 
@@ -194,18 +188,32 @@ router.get("/admin/queue", requireRole("admin"), asyncHandler(async (req, res) =
     return res.status(400).json({ message: "Тодорхойгүй төлөв" });
   }
 
-  const items = await getArtifactsByStatus(status);
+  const items = status === ARTIFACT_STATUSES.PENDING
+    ? await adminController.listPending()
+    : await artifactController.listByStatus(status);
   return res.json({ items, total: items.length, status });
 }));
 
 router.get("/:slug", asyncHandler(async (req, res) => {
-  const artifact = await getArtifactBySlug(req.params.slug);
+  const artifact = await artifactController.getBySlug(req.params.slug);
 
   if (!artifact || !canViewArtifact(artifact, req.user)) {
     return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
   }
 
   return res.json(artifact);
+}));
+
+router.get("/:slug/location", asyncHandler(async (req, res) => {
+  const artifact = await artifactController.getBySlug(req.params.slug);
+  if (!artifact || !canViewArtifact(artifact, req.user)) {
+    return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
+  }
+  const location = await locationService.getLocation(artifact.id);
+  if (!location) {
+    return res.status(404).json({ message: "Байршил тохируулагдаагүй" });
+  }
+  return res.json(location.toJSON());
 }));
 
 router.post(
@@ -216,8 +224,11 @@ router.post(
     if (!req.file) {
       return res.status(400).json({ message: "3D model file required" });
     }
+    if (!mediaService.validateFileType(req.file)) {
+      return res.status(400).json({ message: "Only .glb or .gltf files are allowed" });
+    }
 
-    const publicPath = `/uploads/models/${req.file.filename}`;
+    const publicPath = `/uploads/models/${mediaService.saveToStorage({ filename: req.file.filename })}`;
 
     return res.status(201).json({
       fileName: req.file.originalname,
@@ -234,6 +245,9 @@ router.post(
   (req, res) => {
     if (!req.file) {
       return res.status(400).json({ message: "Image file required" });
+    }
+    if (!mediaService.validateFileType(req.file)) {
+      return res.status(400).json({ message: "Only image files are allowed" });
     }
 
     const publicPath = `/uploads/images/${req.file.filename}`;
@@ -276,7 +290,7 @@ router.post("/", requireVerifiedResearcher, asyncHandler(async (req, res) => {
     return res.status(400).json({ message: validationMessage });
   }
 
-  const created = await createArtifact({
+  const created = await artifactController.create({
     ...artifact,
     createdByUserId: req.user.id
   });
@@ -284,7 +298,7 @@ router.post("/", requireVerifiedResearcher, asyncHandler(async (req, res) => {
 }));
 
 router.put("/:slug", requireAuth, asyncHandler(async (req, res) => {
-  const current = await getArtifactBySlug(req.params.slug);
+  const current = await artifactController.getBySlug(req.params.slug);
 
   if (!current) {
     return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
@@ -305,12 +319,12 @@ router.put("/:slug", requireAuth, asyncHandler(async (req, res) => {
     return res.status(400).json({ message: validationMessage });
   }
 
-  const updated = await updateArtifact(req.params.slug, artifact);
+  const updated = await artifactController.update(req.params.slug, artifact);
   return res.json(updated);
 }));
 
 router.delete("/:slug", requireAuth, asyncHandler(async (req, res) => {
-  const current = await getArtifactBySlug(req.params.slug);
+  const current = await artifactController.getBySlug(req.params.slug);
 
   if (!current) {
     return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
@@ -322,7 +336,7 @@ router.delete("/:slug", requireAuth, asyncHandler(async (req, res) => {
     });
   }
 
-  const deleted = await deleteArtifact(req.params.slug);
+  const deleted = await artifactController.delete(req.params.slug);
 
   if (!deleted) {
     return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
@@ -339,7 +353,7 @@ function ensureOwnerOrAdmin(artifact, user, message) {
 }
 
 router.post("/:slug/revert", requireVerifiedResearcher, asyncHandler(async (req, res) => {
-  const current = await getArtifactBySlug(req.params.slug);
+  const current = await artifactController.getBySlug(req.params.slug);
 
   if (!current) {
     return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
@@ -356,14 +370,12 @@ router.post("/:slug/revert", requireVerifiedResearcher, asyncHandler(async (req,
       .json({ message: "Зөвхөн REJECTED төлөвтэй өвийг NEW рүү буцаах боломжтой" });
   }
 
-  const updated = await setArtifactStatus(req.params.slug, {
-    status: ARTIFACT_STATUSES.NEW
-  });
+  const updated = await artifactController.returnToNew(req.params.slug);
   return res.json(updated);
 }));
 
 router.post("/:slug/submit", requireVerifiedResearcher, asyncHandler(async (req, res) => {
-  const current = await getArtifactBySlug(req.params.slug);
+  const current = await artifactController.getBySlug(req.params.slug);
 
   if (!current) {
     return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
@@ -380,14 +392,12 @@ router.post("/:slug/submit", requireVerifiedResearcher, asyncHandler(async (req,
       .json({ message: "Зөвхөн NEW төлөвтэй өвийг шалгуулахаар илгээх боломжтой" });
   }
 
-  const updated = await setArtifactStatus(req.params.slug, {
-    status: ARTIFACT_STATUSES.PENDING
-  });
+  const updated = await artifactController.submit(req.params.slug);
   return res.json(updated);
 }));
 
 router.post("/:slug/approve", requireRole("admin"), asyncHandler(async (req, res) => {
-  const current = await getArtifactBySlug(req.params.slug);
+  const current = await artifactController.getBySlug(req.params.slug);
 
   if (!current) {
     return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
@@ -399,8 +409,7 @@ router.post("/:slug/approve", requireRole("admin"), asyncHandler(async (req, res
       .json({ message: "Зөвхөн PENDING төлөвтэй өвийг баталгаажуулах боломжтой" });
   }
 
-  const updated = await setArtifactStatus(req.params.slug, {
-    status: ARTIFACT_STATUSES.APPROVED,
+  const updated = await adminController.approve(req.params.slug, {
     reviewerId: req.user.id,
     reviewNote: typeof req.body?.note === "string" ? req.body.note : null
   });
@@ -408,7 +417,7 @@ router.post("/:slug/approve", requireRole("admin"), asyncHandler(async (req, res
 }));
 
 router.post("/:slug/reject", requireRole("admin"), asyncHandler(async (req, res) => {
-  const current = await getArtifactBySlug(req.params.slug);
+  const current = await artifactController.getBySlug(req.params.slug);
 
   if (!current) {
     return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
@@ -426,8 +435,7 @@ router.post("/:slug/reject", requireRole("admin"), asyncHandler(async (req, res)
     return res.status(400).json({ message: "Татгалзах шалтгаан тэмдэглэгээ заавал шаардлагатай" });
   }
 
-  const updated = await setArtifactStatus(req.params.slug, {
-    status: ARTIFACT_STATUSES.REJECTED,
+  const updated = await adminController.reject(req.params.slug, {
     reviewerId: req.user.id,
     reviewNote: note
   });
