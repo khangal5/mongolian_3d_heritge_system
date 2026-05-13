@@ -153,11 +153,20 @@ function canModifyArtifact(artifact, user) {
 
 router.get("/", async (req, res, next) => {
   try {
+    const userLatRaw = req.query.userLat;
+    const userLngRaw = req.query.userLng;
+    const userLat =
+      userLatRaw !== undefined && userLatRaw !== "" ? Number(userLatRaw) : null;
+    const userLng =
+      userLngRaw !== undefined && userLngRaw !== "" ? Number(userLngRaw) : null;
+
     const data = await getArtifacts({
       q: (req.query.q || "").toString().trim(),
       searchBy: (req.query.searchBy || "all").toString().trim(),
       category: (req.query.category || "").toString().trim(),
       province: (req.query.province || "").toString().trim(),
+      userLat: Number.isFinite(userLat) ? userLat : null,
+      userLng: Number.isFinite(userLng) ? userLng : null,
       includeItems:
         (req.query.includeItems || "true").toString().trim().toLowerCase() !== "false",
       status: ARTIFACT_STATUSES.APPROVED

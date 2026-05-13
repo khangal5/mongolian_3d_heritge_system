@@ -70,12 +70,15 @@ export default function SearchPanel({
   searchBy,
   category,
   province,
+  sortByDistance,
+  geolocationStatus,
   filters,
   appliedSearch,
   onQueryChange,
   onSearchByChange,
   onCategoryChange,
   onProvinceChange,
+  onSortByDistanceChange,
   onSubmit,
   onReset
 }) {
@@ -164,6 +167,28 @@ export default function SearchPanel({
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="field field-wide search-distance-toggle">
+          <label className="distance-checkbox">
+            <input
+              type="checkbox"
+              checked={Boolean(sortByDistance)}
+              onChange={(event) => onSortByDistanceChange(event.target.checked)}
+            />
+            <span>Миний байршлаас ойрноос эрэмбэлэх</span>
+          </label>
+          {geolocationStatus === "loading" && (
+            <span className="distance-hint">Байршлыг тогтоож байна...</span>
+          )}
+          {geolocationStatus === "error" && (
+            <span className="distance-hint distance-hint-error">
+              Байршлыг авч чадсангүй. Хөтчийн зөвшөөрлийг шалгана уу.
+            </span>
+          )}
+          {geolocationStatus === "ready" && sortByDistance && (
+            <span className="distance-hint">Байршил амжилттай тогтоогдлоо.</span>
+          )}
         </div>
 
         <div className="field field-wide search-actions">

@@ -19,11 +19,44 @@ export default function HomePage() {
   const [searchBy, setSearchBy] = useState("all");
   const [category, setCategory] = useState("");
   const [province, setProvince] = useState("");
+  const [sortByDistance, setSortByDistance] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
+  const [geolocationStatus, setGeolocationStatus] = useState("idle");
   const [artifacts, setArtifacts] = useState([]);
   const [filters, setFilters] = useState(defaultFilters);
   const [status, setStatus] = useState("idle");
   const [filtersStatus, setFiltersStatus] = useState("loading");
   const [appliedSearch, setAppliedSearch] = useState(null);
+
+  function handleSortByDistanceChange(checked) {
+    setSortByDistance(checked);
+
+    if (!checked) {
+      setUserLocation(null);
+      setGeolocationStatus("idle");
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      setGeolocationStatus("error");
+      return;
+    }
+
+    setGeolocationStatus("loading");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        });
+        setGeolocationStatus("ready");
+      },
+      () => {
+        setGeolocationStatus("error");
+        setSortByDistance(false);
+      }
+    );
+  }
 
   useEffect(() => {
     let ignore = false;
@@ -56,7 +89,12 @@ export default function HomePage() {
       province
     };
 
-    if (!nextSearch.q && !nextSearch.category && !nextSearch.province) {
+    if (sortByDistance && userLocation) {
+      nextSearch.userLat = userLocation.lat;
+      nextSearch.userLng = userLocation.lng;
+    }
+
+    if (!nextSearch.q && !nextSearch.category && !nextSearch.province && !sortByDistance) {
       setAppliedSearch(null);
       setArtifacts([]);
       setStatus("idle");
@@ -82,6 +120,9 @@ export default function HomePage() {
     setSearchBy("all");
     setCategory("");
     setProvince("");
+    setSortByDistance(false);
+    setUserLocation(null);
+    setGeolocationStatus("idle");
     setAppliedSearch(null);
     setArtifacts([]);
     setStatus("idle");
@@ -144,12 +185,15 @@ export default function HomePage() {
           searchBy={searchBy}
           category={category}
           province={province}
+          sortByDistance={sortByDistance}
+          geolocationStatus={geolocationStatus}
           filters={filters}
           appliedSearch={appliedSearch}
           onQueryChange={setQuery}
           onSearchByChange={handleSearchByChange}
           onCategoryChange={setCategory}
           onProvinceChange={setProvince}
+          onSortByDistanceChange={handleSortByDistanceChange}
           onSubmit={handleSearch}
           onReset={handleReset}
         />

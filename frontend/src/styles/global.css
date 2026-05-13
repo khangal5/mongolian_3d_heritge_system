@@ -884,6 +884,37 @@ main {
   gap: 10px;
 }
 
+.search-distance-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.distance-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.92rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.distance-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.distance-hint {
+  font-size: 0.82rem;
+  color: var(--muted, #888);
+  padding-left: 24px;
+}
+
+.distance-hint-error {
+  color: #d23a3a;
+}
+
 /* ========== BUTTONS ========== */
 
 .action-button,
