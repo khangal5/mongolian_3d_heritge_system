@@ -1,4 +1,4 @@
-import { query } from "../db/pool.js";
+import { query, withTransaction } from "../db/pool.js";
 
 function mapReconstructionJob(row) {
   return {
@@ -25,6 +25,7 @@ function mapReconstructionJob(row) {
       captureNotes: row.capture_notes,
       status: row.photo_set_status,
       imageCount: row.image_count,
+      createdByUserId: row.photo_set_created_by || null,
       createdAt: row.photo_set_created_at,
       updatedAt: row.photo_set_updated_at
     },
@@ -55,6 +56,7 @@ const selectJobsSql = `
     ps.capture_notes,
     ps.status AS photo_set_status,
     ps.image_count,
+    ps.created_by_user_id AS photo_set_created_by,
     ps.created_at AS photo_set_created_at,
     ps.updated_at AS photo_set_updated_at,
     COALESCE(
@@ -78,20 +80,26 @@ const selectJobsSql = `
   LEFT JOIN photo_images pi ON pi.photo_set_id = ps.id
 `;
 
-export async function createPhotoSetWithJob({ photoSet, images, job }) {
-  await query("BEGIN");
-
-  try {
-    await query(
+export async function createPhotoSetWithJob({ photoSet, images, job, createdByUserId = null }) {
+  return withTransaction(async (client) => {
+    await client.query(
       `
-        INSERT INTO photo_sets (id, title, description, capture_notes, status, image_count)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO photo_sets (id, title, description, capture_notes, status, image_count, created_by_user_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
       `,
-      [photoSet.id, photoSet.title, photoSet.description, photoSet.captureNotes, photoSet.status, images.length]
+      [
+        photoSet.id,
+        photoSet.title,
+        photoSet.description,
+        photoSet.captureNotes,
+        photoSet.status,
+        images.length,
+        createdByUserId
+      ]
     );
 
     for (const image of images) {
-      await query(
+      await client.query(
         `
           INSERT INTO photo_images (
             id, photo_set_id, original_name, stored_name, mime_type,
@@ -113,7 +121,7 @@ export async function createPhotoSetWithJob({ photoSet, images, job }) {
       );
     }
 
-    await query(
+    await client.query(
       `
         INSERT INTO reconstruction_jobs (
           id, photo_set_id, status, stage, progress_percent, engine,
@@ -138,13 +146,8 @@ export async function createPhotoSetWithJob({ photoSet, images, job }) {
       ]
     );
 
-    await query("COMMIT");
-  } catch (error) {
-    await query("ROLLBACK");
-    throw error;
-  }
-
-  return getReconstructionJobById(job.id);
+    return job.id;
+  }).then((jobId) => getReconstructionJobById(jobId));
 }
 
 export async function listReconstructionJobs() {
@@ -239,4 +242,3 @@ export async function updateReconstructionJob(id, patch) {
 
   return getReconstructionJobById(id);
 }
-

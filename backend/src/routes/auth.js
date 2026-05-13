@@ -40,11 +40,29 @@ const storage = multer.diskStorage({
   }
 });
 
+const ALLOWED_PROOF_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "application/pdf"
+]);
+
 const upload = multer({
   storage,
   limits: {
     files: 1,
     fileSize: 10 * 1024 * 1024
+  },
+  fileFilter: (_req, file, callback) => {
+    if (!ALLOWED_PROOF_MIME_TYPES.has(file.mimetype)) {
+      const error = new Error(
+        "Зөвхөн JPG, PNG зураг эсвэл PDF файл хавсаргах боломжтой"
+      );
+      error.statusCode = 400;
+      callback(error);
+      return;
+    }
+    callback(null, true);
   }
 });
 
