@@ -82,11 +82,8 @@ const SELECT_BASE = `
 `;
 
 function mapArtifact(row) {
-  const primaryImage = row.primary_image_url || row.image_url || "";
-  const galleryFromJoin = Array.isArray(row.gallery_urls) ? row.gallery_urls : [];
-  const galleryFromLegacy = Array.isArray(row.gallery) ? row.gallery : [];
-  const gallery = galleryFromJoin.length ? galleryFromJoin : galleryFromLegacy;
-  const modelUrl = row.model_file_url || row.model_url || row.model_embed_url || null;
+  const gallery = Array.isArray(row.gallery_urls) ? row.gallery_urls : [];
+  const modelUrl = row.model_file_url || null;
 
   return {
     id: row.id,
@@ -95,15 +92,15 @@ function mapArtifact(row) {
     nameMn: row.name_mn,
     category: row.category,
     period: row.period,
-    province: row.loc_province ?? row.province ?? "",
-    location: row.loc_location ?? row.location ?? "",
+    province: row.loc_province ?? "",
+    location: row.loc_location ?? "",
     coordinates: {
-      lat: row.loc_latitude ?? row.latitude ?? null,
-      lng: row.loc_longitude ?? row.longitude ?? null
+      lat: row.loc_latitude ?? null,
+      lng: row.loc_longitude ?? null
     },
     shortDescription: row.short_description,
     description: row.description,
-    imageUrl: primaryImage,
+    imageUrl: row.primary_image_url || "",
     gallery,
     modelUrl,
     modelEmbedUrl: modelUrl,
