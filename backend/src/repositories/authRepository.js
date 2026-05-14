@@ -84,6 +84,40 @@ export async function findUserByEmail(email) {
   return result.rows[0] || null;
 }
 
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_MINUTES = 15;
+
+export async function registerFailedLogin(userId) {
+  const result = await query(
+    `
+      UPDATE users
+      SET
+        failed_login_count = failed_login_count + 1,
+        locked_until = CASE
+          WHEN failed_login_count + 1 >= $2 THEN NOW() + ($3 || ' minutes')::INTERVAL
+          ELSE locked_until
+        END,
+        updated_at = NOW()
+      WHERE id = $1
+      RETURNING failed_login_count, locked_until
+    `,
+    [userId, MAX_FAILED_ATTEMPTS, String(LOCKOUT_MINUTES)]
+  );
+
+  return result.rows[0] || null;
+}
+
+export async function resetFailedLoginCount(userId) {
+  await query(
+    `
+      UPDATE users
+      SET failed_login_count = 0, locked_until = NULL, updated_at = NOW()
+      WHERE id = $1
+    `,
+    [userId]
+  );
+}
+
 export async function findUserById(id) {
   const result = await query(
     `
@@ -105,10 +139,10 @@ export async function findUserById(id) {
 export async function createSession(session) {
   await query(
     `
-      INSERT INTO auth_sessions (id, user_id, token_hash, expires_at)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO auth_sessions (id, user_id, token_hash, expires_at, remember_me)
+      VALUES ($1, $2, $3, $4, $5)
     `,
-    [session.id, session.userId, session.tokenHash, session.expiresAt]
+    [session.id, session.userId, session.tokenHash, session.expiresAt, Boolean(session.rememberMe)]
   );
 }
 
@@ -135,7 +169,12 @@ export async function touchSession(sessionId) {
   await query(
     `
       UPDATE auth_sessions
-      SET last_used_at = NOW()
+      SET
+        last_used_at = NOW(),
+        expires_at = CASE
+          WHEN remember_me THEN LEAST(NOW() + INTERVAL '7 days', created_at + INTERVAL '30 days')
+          ELSE LEAST(NOW() + INTERVAL '2 hours', created_at + INTERVAL '24 hours')
+        END
       WHERE id = $1
     `,
     [sessionId]
@@ -192,6 +231,76 @@ export async function deletePendingVerificationsForUser(userId) {
     `
       DELETE FROM email_verifications
       WHERE user_id = $1 AND consumed_at IS NULL
+    `,
+    [userId]
+  );
+}
+
+export async function createPasswordResetToken({ id, userId, tokenHash, expiresAt }) {
+  await query(
+    `
+      INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at)
+      VALUES ($1, $2, $3, $4)
+    `,
+    [id, userId, tokenHash, expiresAt]
+  );
+}
+
+export async function findPasswordResetTokenByHash(tokenHash) {
+  const result = await query(
+    `
+      SELECT *
+      FROM password_reset_tokens
+      WHERE token_hash = $1
+      LIMIT 1
+    `,
+    [tokenHash]
+  );
+
+  return result.rows[0] || null;
+}
+
+export async function consumePasswordResetToken(tokenId) {
+  await query(
+    `
+      UPDATE password_reset_tokens
+      SET consumed_at = NOW()
+      WHERE id = $1
+    `,
+    [tokenId]
+  );
+}
+
+export async function deletePendingPasswordResets(userId) {
+  await query(
+    `
+      DELETE FROM password_reset_tokens
+      WHERE user_id = $1 AND consumed_at IS NULL
+    `,
+    [userId]
+  );
+}
+
+export async function updateUserPassword(userId, passwordHash) {
+  await query(
+    `
+      UPDATE users
+      SET
+        password_hash = $2,
+        failed_login_count = 0,
+        locked_until = NULL,
+        updated_at = NOW()
+      WHERE id = $1
+    `,
+    [userId, passwordHash]
+  );
+}
+
+export async function deleteAllSessionsForUser(userId) {
+  await query(
+    `
+      DELETE FROM auth_sessions
+      WHERE user_id = $1
     `,
     [userId]
   );

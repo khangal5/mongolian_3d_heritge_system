@@ -1006,6 +1006,31 @@ main {
   grid-column: 1 / -1;
 }
 
+.auth-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.remember-me {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted-strong);
+  font-size: 0.92rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.remember-me input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #d17824;
+  cursor: pointer;
+}
+
 .field {
   display: flex;
   flex-direction: column;

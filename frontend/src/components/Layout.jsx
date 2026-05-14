@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { clearStoredAuth, getStoredAuth } from "../auth.js";
+import { clearStoredAuth, getStoredAuth, setStoredAuth } from "../auth.js";
+import { getCurrentUser, logout as logoutRequest } from "../api/client.js";
 
 function BrandLogo() {
   return (
@@ -98,7 +100,33 @@ function buildNavItems(role) {
 
 export default function Layout({ children }) {
   const location = useLocation();
-  const auth = typeof window === "undefined" ? null : getStoredAuth();
+  const [auth, setAuth] = useState(() =>
+    typeof window === "undefined" ? null : getStoredAuth()
+  );
+
+  useEffect(() => {
+    if (!auth?.user) return;
+
+    let cancelled = false;
+    getCurrentUser()
+      .then((response) => {
+        if (cancelled) return;
+        const next = { user: response.user };
+        setAuth(next);
+        setStoredAuth(next);
+      })
+      .catch((requestError) => {
+        if (cancelled) return;
+        if (requestError.status === 401) {
+          clearStoredAuth();
+          setAuth(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const navItems = buildNavItems(auth?.user?.role);
   const isActive = (to) =>
@@ -159,7 +187,12 @@ export default function Layout({ children }) {
             <button
               type="button"
               className="nav-button"
-              onClick={() => {
+              onClick={async () => {
+                try {
+                  await logoutRequest();
+                } catch {
+                  // Сервер дээр session устгахгүй ч UI-аас гаргана
+                }
                 clearStoredAuth();
                 window.location.href = "/";
               }}

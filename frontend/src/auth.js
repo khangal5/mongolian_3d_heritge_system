@@ -10,7 +10,12 @@ export function getStoredAuth() {
 }
 
 export function setStoredAuth(auth) {
-  window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(auth));
+  const payload = auth?.user ? { user: auth.user } : null;
+  if (payload) {
+    window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(payload));
+  } else {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  }
 }
 
 export function clearStoredAuth() {
@@ -18,12 +23,10 @@ export function clearStoredAuth() {
 }
 
 export function updateStoredUser(user) {
-  const current = getStoredAuth();
-  if (!current) {
+  if (!user) {
     return null;
   }
-  const next = { ...current, user };
+  const next = { user };
   setStoredAuth(next);
   return next;
 }
-

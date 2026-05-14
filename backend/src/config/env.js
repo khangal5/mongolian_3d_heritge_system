@@ -3,10 +3,17 @@ import path from "node:path";
 
 export const config = {
   port: Number(process.env.PORT || 4000),
-  corsOrigin: process.env.CORS_ORIGIN || "*",
+  nodeEnv: process.env.NODE_ENV || "development",
+  trustProxy: process.env.TRUST_PROXY || (process.env.NODE_ENV === "production" ? "1" : false),
+  corsOrigin: (process.env.CORS_ORIGIN || "http://localhost:5173")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean),
   databaseUrl:
     process.env.DATABASE_URL ||
     "postgresql://postgres:postgres@localhost:5432/mongolian_heritage",
+  redisUrl: process.env.REDIS_URL || null,
+  cacheTtlSeconds: Number(process.env.CACHE_TTL_SECONDS || 60),
   uploadDir: path.resolve(process.cwd(), process.env.UPLOAD_DIR || "uploads"),
   publicAppUrl: (process.env.PUBLIC_APP_URL || "http://localhost:5173").replace(/\/$/, ""),
   emailDomainWhitelist: (

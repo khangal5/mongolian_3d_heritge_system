@@ -1,5 +1,6 @@
 import { findSessionWithUserByTokenHash, touchSession } from "../repositories/authRepository.js";
 import { hashToken } from "../utils/tokens.js";
+import { AUTH_COOKIE_NAME } from "../utils/cookies.js";
 
 function extractBearerToken(headerValue) {
   if (!headerValue || !headerValue.startsWith("Bearer ")) {
@@ -9,9 +10,17 @@ function extractBearerToken(headerValue) {
   return headerValue.slice("Bearer ".length).trim();
 }
 
+function extractToken(req) {
+  const cookieToken = req.cookies?.[AUTH_COOKIE_NAME];
+  if (cookieToken) {
+    return cookieToken;
+  }
+  return extractBearerToken(req.headers.authorization);
+}
+
 export async function optionalAuth(req, _res, next) {
   try {
-    const token = extractBearerToken(req.headers.authorization);
+    const token = extractToken(req);
 
     if (!token) {
       req.user = null;
