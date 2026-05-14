@@ -1,10 +1,56 @@
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:4000/api";
 
+const DEFAULT_FETCH_OPTIONS = {
+  credentials: "include"
+};
+
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+let csrfToken = null;
+let csrfBootstrap = null;
+
+async function ensureCsrfToken() {
+  if (csrfToken) return csrfToken;
+
+  if (!csrfBootstrap) {
+    csrfBootstrap = fetch(`${API_BASE_URL}/csrf-token`, DEFAULT_FETCH_OPTIONS)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        csrfToken = data?.csrfToken || null;
+        return csrfToken;
+      })
+      .finally(() => {
+        csrfBootstrap = null;
+      });
+  }
+  await csrfBootstrap;
+  return csrfToken;
+}
+
+async function buildFetchOptions(options = {}) {
+  const method = (options.method || "GET").toUpperCase();
+  const merged = { ...DEFAULT_FETCH_OPTIONS, ...options, method };
+
+  if (MUTATING_METHODS.has(method)) {
+    const token = await ensureCsrfToken();
+    merged.headers = {
+      ...(options.headers || {}),
+      ...(token ? { "X-CSRF-Token": token } : {})
+    };
+  }
+
+  return merged;
+}
+
+function buildError(response, message) {
+  const error = new Error(message);
+  error.status = response.status;
+  return error;
+}
+
 async function request(path) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: buildAuthHeaders()
-  });
+  const response = await fetch(`${API_BASE_URL}${path}`, DEFAULT_FETCH_OPTIONS);
 
   if (!response.ok) {
     let message = `Request failed with status ${response.status}`;
@@ -16,14 +62,15 @@ async function request(path) {
       // Ignore non-JSON error responses.
     }
 
-    throw new Error(message);
+    throw buildError(response, message);
   }
 
   return response.json();
 }
 
 async function requestWithOptions(path, options) {
-  const response = await fetch(`${API_BASE_URL}${path}`, options);
+  const fetchOptions = await buildFetchOptions(options);
+  const response = await fetch(`${API_BASE_URL}${path}`, fetchOptions);
 
   if (!response.ok) {
     let message = `Request failed with status ${response.status}`;
@@ -35,7 +82,7 @@ async function requestWithOptions(path, options) {
       // Ignore non-JSON error responses.
     }
 
-    throw new Error(message);
+    throw buildError(response, message);
   }
 
   if (response.status === 204) {
@@ -43,20 +90,6 @@ async function requestWithOptions(path, options) {
   }
 
   return response.json();
-}
-
-function getToken() {
-  try {
-    const auth = JSON.parse(window.localStorage.getItem("heritage_auth"));
-    return auth?.token || null;
-  } catch {
-    return null;
-  }
-}
-
-function buildAuthHeaders() {
-  const token = getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 export function getArtifacts(params = {}) {
@@ -87,7 +120,6 @@ export function getReconstructionJobById(id) {
 export function uploadReconstructionJob(formData) {
   return requestWithOptions("/reconstruction-jobs/upload", {
     method: "POST",
-    headers: buildAuthHeaders(),
     body: formData
   });
 }
@@ -95,7 +127,6 @@ export function uploadReconstructionJob(formData) {
 export function uploadArtifactModel(formData) {
   return requestWithOptions("/artifacts/upload-model", {
     method: "POST",
-    headers: buildAuthHeaders(),
     body: formData
   });
 }
@@ -123,8 +154,23 @@ export function getCurrentUser() {
 
 export function logout() {
   return requestWithOptions("/auth/logout", {
+    method: "POST"
+  });
+}
+
+export function forgotPassword(email) {
+  return requestWithOptions("/auth/forgot-password", {
     method: "POST",
-    headers: buildAuthHeaders()
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email })
+  });
+}
+
+export function resetPassword(token, password) {
+  return requestWithOptions("/auth/reset-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, password })
   });
 }
 
@@ -138,8 +184,7 @@ export function verifyEmail(token) {
 
 export function resendVerificationEmail() {
   return requestWithOptions("/auth/resend-verification", {
-    method: "POST",
-    headers: buildAuthHeaders()
+    method: "POST"
   });
 }
 
@@ -149,15 +194,13 @@ export function getAdminResearchers() {
 
 export function verifyResearcherManually(id) {
   return requestWithOptions(`/auth/admin/researchers/${id}/verify`, {
-    method: "POST",
-    headers: buildAuthHeaders()
+    method: "POST"
   });
 }
 
 export function revokeResearcherVerification(id) {
   return requestWithOptions(`/auth/admin/researchers/${id}/revoke`, {
-    method: "POST",
-    headers: buildAuthHeaders()
+    method: "POST"
   });
 }
 
@@ -171,8 +214,7 @@ export function createArtifactRequest(payload) {
   return requestWithOptions("/artifacts", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
-      ...buildAuthHeaders()
+      "Content-Type": "application/json"
     },
     body: JSON.stringify(payload)
   });
@@ -189,15 +231,13 @@ export function getAdminQueue(status = "PENDING") {
 
 export function submitArtifact(slug) {
   return requestWithOptions(`/artifacts/${slug}/submit`, {
-    method: "POST",
-    headers: buildAuthHeaders()
+    method: "POST"
   });
 }
 
 export function revertArtifact(slug) {
   return requestWithOptions(`/artifacts/${slug}/revert`, {
-    method: "POST",
-    headers: buildAuthHeaders()
+    method: "POST"
   });
 }
 
@@ -205,8 +245,7 @@ export function updateArtifactRequest(slug, payload) {
   return requestWithOptions(`/artifacts/${slug}`, {
     method: "PUT",
     headers: {
-      "Content-Type": "application/json",
-      ...buildAuthHeaders()
+      "Content-Type": "application/json"
     },
     body: JSON.stringify(payload)
   });
@@ -216,8 +255,7 @@ export function approveArtifact(slug, note = "") {
   return requestWithOptions(`/artifacts/${slug}/approve`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
-      ...buildAuthHeaders()
+      "Content-Type": "application/json"
     },
     body: JSON.stringify({ note })
   });
@@ -227,8 +265,7 @@ export function rejectArtifact(slug, note) {
   return requestWithOptions(`/artifacts/${slug}/reject`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
-      ...buildAuthHeaders()
+      "Content-Type": "application/json"
     },
     body: JSON.stringify({ note })
   });
@@ -236,7 +273,6 @@ export function rejectArtifact(slug, note) {
 
 export function deleteArtifactRequest(slug) {
   return requestWithOptions(`/artifacts/${slug}`, {
-    method: "DELETE",
-    headers: buildAuthHeaders()
+    method: "DELETE"
   });
 }
