@@ -1,4 +1,7 @@
 import { config } from "../config/env.js";
+import { logger } from "./logger.js";
+
+const emailLogger = logger.child({ module: "email" });
 
 export function isWhitelistedEmail(email) {
   if (config.emailDomainBypass) {
@@ -98,8 +101,9 @@ async function sendViaEthereal({ to, subject, text, html }) {
       secure: etherealAccount.smtp.secure,
       auth: { user: etherealAccount.user, pass: etherealAccount.pass }
     });
-    console.log(
-      `[email] Ethereal test account: ${etherealAccount.user} (https://ethereal.email)`
+    emailLogger.info(
+      { account: etherealAccount.user },
+      "Ethereal test account үүсгэсэн (https://ethereal.email)"
     );
   }
 
@@ -114,6 +118,29 @@ async function sendViaEthereal({ to, subject, text, html }) {
   return nodemailer.getTestMessageUrl(info);
 }
 
+async function dispatchEmail({ to, subject, text, html, link, label }) {
+  if (config.resendApiKey) {
+    await sendViaResend({ to, subject, text, html });
+    emailLogger.info({ to, label, channel: "resend" }, "Имэйл илгээгдсэн");
+    return { delivered: "resend", link };
+  }
+
+  if (config.smtpHost) {
+    await sendViaSmtp({ to, subject, text, html });
+    emailLogger.info({ to, label, channel: "smtp" }, "Имэйл илгээгдсэн");
+    return { delivered: "smtp", link };
+  }
+
+  if (config.emailUseEthereal) {
+    const previewUrl = await sendViaEthereal({ to, subject, text, html });
+    emailLogger.info({ to, label, channel: "ethereal", previewUrl }, "Ethereal preview бэлэн");
+    return { delivered: "ethereal", link, previewUrl };
+  }
+
+  emailLogger.info({ to, label, channel: "console", link }, "Dev fallback — линкийг console-д харуулсан");
+  return { delivered: "console", link };
+}
+
 export async function sendVerificationEmail({ to, fullName, token }) {
   const link = `${config.publicAppUrl}/verify-email?token=${encodeURIComponent(token)}`;
   const subject = "Имэйл баталгаажуулах — Монголын 3D өвийн сан";
@@ -126,28 +153,20 @@ export async function sendVerificationEmail({ to, fullName, token }) {
     <p style="color:#6b6258;font-size:0.9em;">Энэ холбоос 24 цагийн дараа хүчингүй болно.</p>
   `;
 
-  if (config.resendApiKey) {
-    await sendViaResend({ to, subject, text, html });
-    console.log(`[email] Resend-аар ${to} рүү илгээлээ`);
-    return { delivered: "resend", link };
-  }
+  return dispatchEmail({ to, subject, text, html, link, label: "verification" });
+}
 
-  if (config.smtpHost) {
-    await sendViaSmtp({ to, subject, text, html });
-    console.log(`[email] Sent verification mail to ${to}`);
-    return { delivered: "smtp", link };
-  }
+export async function sendPasswordResetEmail({ to, fullName, token }) {
+  const link = `${config.publicAppUrl}/reset-password?token=${encodeURIComponent(token)}`;
+  const subject = "Нууц үг сэргээх — Монголын 3D өвийн сан";
+  const text = `Сайн байна уу, ${fullName || ""}!\n\nТаны бүртгэлийн нууц үгийг сэргээх хүсэлт ирлээ. Дараах холбоосоор шинэ нууц үгээ тохируулна уу:\n${link}\n\nЭнэ холбоос 1 цагийн дараа хүчингүй болно. Хэрэв та энэ хүсэлтийг хийгээгүй бол энэ имэйлийг үл хэрэгсээрэй.`;
+  const html = `
+    <p>Сайн байна уу, <strong>${fullName || ""}</strong>!</p>
+    <p>Таны бүртгэлийн нууц үгийг сэргээх хүсэлт ирлээ. Дараах товчоор шинэ нууц үгээ тохируулна уу:</p>
+    <p><a href="${link}" style="background:#2b1b13;color:#fff8ec;padding:10px 18px;border-radius:999px;text-decoration:none;">Шинэ нууц үг тохируулах</a></p>
+    <p>Эсвэл линкийг хуулж нээнэ үү:<br/><a href="${link}">${link}</a></p>
+    <p style="color:#6b6258;font-size:0.9em;">Энэ холбоос 1 цагийн дараа хүчингүй болно. Хэрэв та энэ хүсэлтийг хийгээгүй бол энэ имэйлийг үл хэрэгсээрэй.</p>
+  `;
 
-  if (config.emailUseEthereal) {
-    const previewUrl = await sendViaEthereal({ to, subject, text, html });
-    console.log(`[email] Ethereal preview: ${previewUrl}`);
-    return { delivered: "ethereal", link, previewUrl };
-  }
-
-  console.log("\n=== EMAIL VERIFICATION (DEV CONSOLE) ===");
-  console.log(`To:      ${to}`);
-  console.log(`Subject: ${subject}`);
-  console.log(`Link:    ${link}`);
-  console.log("=========================================\n");
-  return { delivered: "console", link };
+  return dispatchEmail({ to, subject, text, html, link, label: "password-reset" });
 }
