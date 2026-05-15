@@ -1,72 +1,79 @@
 import { randomUUID } from "node:crypto";
-import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { Router } from "express";
-import multer from "multer";
 import { config } from "../config/env.js";
 import {
   consumeEmailVerification,
+  consumePasswordResetToken,
   createEmailVerification,
+  createPasswordResetToken,
   createSession,
   createUser,
+  deleteAllSessionsForUser,
+  deletePendingPasswordResets,
   deletePendingVerificationsForUser,
   deleteSessionByTokenHash,
   findEmailVerificationByTokenHash,
+  findPasswordResetTokenByHash,
   findUserByEmail,
   findUserById,
   listResearchersWithVerifications,
-  setUserVerificationStatus
+  registerFailedLogin,
+  resetFailedLoginCount,
+  setUserVerificationStatus,
+  updateUserPassword
 } from "../repositories/authRepository.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import {
+  loginLimiter,
+  passwordResetLimiter,
+  registerLimiter,
+  verificationResendLimiter
+} from "../middleware/rateLimit.js";
+import { validate } from "../middleware/validate.js";
+import { auditAction } from "../middleware/audit.js";
+import {
+  forgotPasswordSchema,
+  loginSchema,
+  registerResearcherSchema,
+  resetPasswordSchema,
+  verifyEmailSchema
+} from "../schemas/auth.js";
+import {
   isWhitelistedEmail,
+  sendPasswordResetEmail,
   sendVerificationEmail,
   whitelistDescription
 } from "../utils/email.js";
 import { hashPassword, verifyPassword } from "../utils/password.js";
 import { generateToken, hashToken } from "../utils/tokens.js";
+import { createUploadHandler } from "../utils/upload.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
+import { clearAuthCookie, setAuthCookie } from "../utils/cookies.js";
 
 const router = Router();
-const proofDir = path.join(config.uploadDir, "researcher-proofs");
 
-await mkdir(proofDir, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, callback) => {
-    callback(null, proofDir);
-  },
-  filename: (_req, file, callback) => {
-    callback(null, `${Date.now()}-${randomUUID()}${path.extname(file.originalname) || ".jpg"}`);
-  }
-});
-
-const ALLOWED_PROOF_MIME_TYPES = new Set([
-  "image/jpeg",
-  "image/jpg",
-  "image/png",
-  "application/pdf"
-]);
-
-const upload = multer({
-  storage,
-  limits: {
-    files: 1,
-    fileSize: 10 * 1024 * 1024
-  },
-  fileFilter: (_req, file, callback) => {
-    if (!ALLOWED_PROOF_MIME_TYPES.has(file.mimetype)) {
-      const error = new Error(
-        "Зөвхөн JPG, PNG зураг эсвэл PDF файл хавсаргах боломжтой"
-      );
-      error.statusCode = 400;
-      callback(error);
-      return;
-    }
-    callback(null, true);
-  }
+const upload = await createUploadHandler({
+  destinationDir: path.join(config.uploadDir, "researcher-proofs"),
+  mimeWhitelist: new Set(["image/jpeg", "image/jpg", "image/png", "application/pdf"]),
+  maxFiles: 1,
+  maxFileSizeBytes: 10 * 1024 * 1024,
+  errorMessage: "Зөвхөн JPG, PNG зураг эсвэл PDF файл хавсаргах боломжтой",
+  defaultExtension: ".jpg"
 });
 
 const VERIFICATION_TTL_MS = 1000 * 60 * 60 * 24;
+
+function presentVerification(verification) {
+  const payload = { delivered: verification.delivered };
+  if (verification.delivered === "console") {
+    payload.devLink = verification.link;
+  }
+  if (verification.delivered === "ethereal") {
+    payload.previewUrl = verification.previewUrl;
+  }
+  return payload;
+}
 
 async function issueVerification(user) {
   await deletePendingVerificationsForUser(user.id);
@@ -90,8 +97,12 @@ async function issueVerification(user) {
   return sendResult;
 }
 
-router.post("/register-researcher", upload.single("proofImage"), async (req, res, next) => {
-  try {
+router.post(
+  "/register-researcher",
+  registerLimiter,
+  upload.single("proofImage"),
+  validate({ body: registerResearcherSchema }),
+  asyncHandler(async (req, res) => {
     const {
       fullName,
       email,
@@ -104,15 +115,7 @@ router.post("/register-researcher", upload.single("proofImage"), async (req, res
       researchFocus
     } = req.body;
 
-    if (!fullName || !email || !password || !organization || !positionTitle) {
-      return res.status(400).json({
-        message: "Овог нэр, имэйл, байгууллага, албан тушаал, нууц үг шаардлагатай"
-      });
-    }
-
-    const normalizedEmail = String(email).trim().toLowerCase();
-
-    if (!isWhitelistedEmail(normalizedEmail)) {
+    if (!isWhitelistedEmail(email)) {
       return res.status(400).json({
         message: `Зөвхөн ${whitelistDescription()} төгсгөлтэй албан имэйл хэрэглэх боломжтой`
       });
@@ -124,11 +127,7 @@ router.post("/register-researcher", upload.single("proofImage"), async (req, res
       });
     }
 
-    if (password.length < 8) {
-      return res.status(400).json({ message: "Нууц үг хамгийн багадаа 8 тэмдэгт байна" });
-    }
-
-    const existingUser = await findUserByEmail(normalizedEmail);
+    const existingUser = await findUserByEmail(email);
 
     if (existingUser) {
       return res.status(409).json({ message: "Энэ имэйлтэй хэрэглэгч бүртгэлтэй байна" });
@@ -136,17 +135,17 @@ router.post("/register-researcher", upload.single("proofImage"), async (req, res
 
     const user = await createUser({
       id: randomUUID(),
-      fullName: fullName.trim(),
-      email: normalizedEmail,
-      institutionEmail: normalizedEmail,
+      fullName,
+      email,
+      institutionEmail: email,
       passwordHash: hashPassword(password),
       role: "researcher",
-      organization: organization.trim(),
-      departmentName: departmentName?.trim() || null,
-      positionTitle: positionTitle.trim(),
-      phoneNumber: phoneNumber?.trim() || null,
-      employeeCode: employeeCode?.trim() || null,
-      researchFocus: researchFocus?.trim() || null,
+      organization,
+      departmentName: departmentName || null,
+      positionTitle,
+      phoneNumber: phoneNumber || null,
+      employeeCode: employeeCode || null,
+      researchFocus: researchFocus || null,
       verificationDocumentName: req.file.originalname,
       verificationDocumentUrl: `/uploads/researcher-proofs/${req.file.filename}`,
       verificationStatus: "submitted"
@@ -158,44 +157,57 @@ router.post("/register-researcher", upload.single("proofImage"), async (req, res
       message:
         "Бүртгэл амжилттай үүслээ. Албан имэйлд илгээсэн баталгаажуулах холбоосыг дарж, имэйлээ баталгаажуулна уу.",
       user,
-      verification: {
-        delivered: verification.delivered,
-        ...(verification.delivered === "console" ? { devLink: verification.link } : {}),
-        ...(verification.delivered === "ethereal"
-          ? { previewUrl: verification.previewUrl }
-          : {})
-      }
+      verification: presentVerification(verification)
     });
-  } catch (error) {
-    return next(error);
-  }
-});
+  })
+);
 
-router.post("/login", async (req, res, next) => {
-  try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ message: "Имэйл болон нууц үг шаардлагатай" });
-    }
+router.post(
+  "/login",
+  loginLimiter,
+  validate({ body: loginSchema }),
+  asyncHandler(async (req, res) => {
+    const { email, password, rememberMe } = req.body;
 
     const userRow = await findUserByEmail(email);
 
-    if (!userRow || !verifyPassword(password, userRow.password_hash)) {
+    if (!userRow) {
       return res.status(401).json({ message: "Имэйл эсвэл нууц үг буруу байна" });
     }
 
+    if (userRow.locked_until && new Date(userRow.locked_until) > new Date()) {
+      const minutesLeft = Math.ceil(
+        (new Date(userRow.locked_until).getTime() - Date.now()) / 60000
+      );
+      return res.status(423).json({
+        message: `Бүртгэл түр хаагдсан. ${minutesLeft} минутын дараа дахин оролдоно уу.`
+      });
+    }
+
+    if (!verifyPassword(password, userRow.password_hash)) {
+      await registerFailedLogin(userRow.id);
+      return res.status(401).json({ message: "Имэйл эсвэл нууц үг буруу байна" });
+    }
+
+    await resetFailedLoginCount(userRow.id);
+
     const token = generateToken();
+    const remember = Boolean(rememberMe);
+    const initialTtlMs = remember
+      ? 1000 * 60 * 60 * 24 * 7
+      : 1000 * 60 * 60 * 2;
 
     await createSession({
       id: randomUUID(),
       userId: userRow.id,
       tokenHash: hashToken(token),
-      expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString()
+      expiresAt: new Date(Date.now() + initialTtlMs).toISOString(),
+      rememberMe: remember
     });
 
+    setAuthCookie(res, token, { rememberMe: remember });
+
     return res.json({
-      token,
       user: {
         id: userRow.id,
         fullName: userRow.full_name,
@@ -214,36 +226,116 @@ router.post("/login", async (req, res, next) => {
         status: userRow.status
       }
     });
-  } catch (error) {
-    return next(error);
-  }
-});
+  })
+);
 
 router.get("/me", requireAuth, (req, res) => {
   res.json({ user: req.user });
 });
 
-router.post("/logout", requireAuth, async (req, res, next) => {
-  try {
-    const token = req.headers.authorization?.slice("Bearer ".length).trim();
+router.post("/logout", requireAuth, asyncHandler(async (req, res) => {
+    const cookieToken = req.cookies?.heritage_session;
+    const headerToken = req.headers.authorization?.startsWith("Bearer ")
+      ? req.headers.authorization.slice("Bearer ".length).trim()
+      : null;
+    const token = cookieToken || headerToken;
 
     if (token) {
       await deleteSessionByTokenHash(hashToken(token));
     }
 
+    clearAuthCookie(res);
+
     return res.status(204).send();
-  } catch (error) {
-    return next(error);
-  }
-});
+}));
 
-router.post("/verify-email", async (req, res, next) => {
-  try {
-    const token = req.body?.token;
+const PASSWORD_RESET_TTL_MS = 1000 * 60 * 60;
 
-    if (!token || typeof token !== "string") {
-      return res.status(400).json({ message: "Баталгаажуулах токен шаардлагатай" });
+router.post(
+  "/forgot-password",
+  passwordResetLimiter,
+  validate({ body: forgotPasswordSchema }),
+  asyncHandler(async (req, res) => {
+    const email = req.body.email;
+
+    const genericResponse = {
+      message: "Хэрэв энэ имэйлтэй бүртгэл олдвол нууц үг сэргээх холбоос илгээгдэнэ."
+    };
+
+    if (!email) {
+      return res.json(genericResponse);
     }
+
+    const userRow = await findUserByEmail(email);
+    if (!userRow) {
+      return res.json(genericResponse);
+    }
+
+    await deletePendingPasswordResets(userRow.id);
+
+    const token = generateToken();
+    await createPasswordResetToken({
+      id: randomUUID(),
+      userId: userRow.id,
+      tokenHash: hashToken(token),
+      expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS).toISOString()
+    });
+
+    const payload = { ...genericResponse };
+    try {
+      const sendResult = await sendPasswordResetEmail({
+        to: userRow.email,
+        fullName: userRow.full_name,
+        token
+      });
+      if (sendResult.delivered === "console") {
+        payload.devLink = sendResult.link;
+      }
+      if (sendResult.delivered === "ethereal") {
+        payload.previewUrl = sendResult.previewUrl;
+      }
+    } catch (sendError) {
+      req.log?.error?.({ err: sendError }, "Password reset email илгээгдсэнгүй");
+    }
+
+    return res.json(payload);
+  })
+);
+
+router.post(
+  "/reset-password",
+  passwordResetLimiter,
+  validate({ body: resetPasswordSchema }),
+  asyncHandler(async (req, res) => {
+    const { token, password } = req.body;
+
+    const record = await findPasswordResetTokenByHash(hashToken(token));
+
+    if (!record) {
+      return res.status(404).json({ message: "Холбоос буруу эсвэл ашиглагдсан" });
+    }
+
+    if (record.consumed_at) {
+      return res.status(409).json({ message: "Энэ холбоосоор аль хэдийн нууц үг сэргээгдсэн" });
+    }
+
+    if (new Date(record.expires_at) < new Date()) {
+      return res.status(410).json({ message: "Холбоосын хүчинтэй хугацаа дууссан" });
+    }
+
+    await updateUserPassword(record.user_id, hashPassword(password));
+    await consumePasswordResetToken(record.id);
+    await deleteAllSessionsForUser(record.user_id);
+
+    return res.json({ message: "Нууц үг амжилттай сэргээгдлээ. Та шинэ нууц үгээрээ нэвтэрнэ үү." });
+  })
+);
+
+router.post(
+  "/verify-email",
+  validate({ body: verifyEmailSchema }),
+  asyncHandler(async (req, res) => {
+    const { token } = req.body;
 
     const record = await findEmailVerificationByTokenHash(hashToken(token));
 
@@ -265,13 +357,10 @@ router.post("/verify-email", async (req, res, next) => {
     return res.json({
       message: "Имэйл амжилттай баталгаажлаа."
     });
-  } catch (error) {
-    return next(error);
-  }
-});
+  })
+);
 
-router.post("/resend-verification", requireAuth, async (req, res, next) => {
-  try {
+router.post("/resend-verification", verificationResendLimiter, requireAuth, asyncHandler(async (req, res) => {
     const userRow = await findUserById(req.user.id);
 
     if (!userRow) {
@@ -286,65 +375,46 @@ router.post("/resend-verification", requireAuth, async (req, res, next) => {
 
     return res.json({
       message: "Шинэ баталгаажуулах холбоос албан имэйл рүү илгээгдлээ",
-      verification: {
-        delivered: verification.delivered,
-        ...(verification.delivered === "console" ? { devLink: verification.link } : {}),
-        ...(verification.delivered === "ethereal"
-          ? { previewUrl: verification.previewUrl }
-          : {})
-      }
+      verification: presentVerification(verification)
     });
-  } catch (error) {
-    return next(error);
-  }
-});
+}));
 
-router.get("/admin/researchers", requireRole("admin"), async (_req, res, next) => {
-  try {
-    const items = await listResearchersWithVerifications();
-    res.json({ items, total: items.length });
-  } catch (error) {
-    next(error);
-  }
-});
+router.get("/admin/researchers", requireRole("admin"), asyncHandler(async (_req, res) => {
+  const items = await listResearchersWithVerifications();
+  res.json({ items, total: items.length });
+}));
 
 router.post(
   "/admin/researchers/:id/verify",
   requireRole("admin"),
-  async (req, res, next) => {
-    try {
-      const target = await findUserById(req.params.id);
-      if (!target) {
-        return res.status(404).json({ message: "Хэрэглэгч олдсонгүй" });
-      }
-      if (target.verificationStatus === "verified") {
-        return res.status(409).json({ message: "Аль хэдийн баталгаажсан" });
-      }
-      await setUserVerificationStatus(target.id, "verified");
-      await deletePendingVerificationsForUser(target.id);
-      return res.json({ message: "Хэрэглэгчийг гар аргаар баталгаажууллаа" });
-    } catch (error) {
-      return next(error);
+  auditAction("admin.researcher.verify", { targetType: "user" }),
+  asyncHandler(async (req, res) => {
+    const target = await findUserById(req.params.id);
+    if (!target) {
+      return res.status(404).json({ message: "Хэрэглэгч олдсонгүй" });
     }
-  }
+    if (target.verificationStatus === "verified") {
+      return res.status(409).json({ message: "Аль хэдийн баталгаажсан" });
+    }
+    await setUserVerificationStatus(target.id, "verified");
+    await deletePendingVerificationsForUser(target.id);
+    return res.json({ message: "Хэрэглэгчийг гар аргаар баталгаажууллаа" });
+  })
 );
 
 router.post(
   "/admin/researchers/:id/revoke",
   requireRole("admin"),
-  async (req, res, next) => {
-    try {
-      const target = await findUserById(req.params.id);
-      if (!target) {
-        return res.status(404).json({ message: "Хэрэглэгч олдсонгүй" });
-      }
-      await setUserVerificationStatus(target.id, "submitted");
-      await deletePendingVerificationsForUser(target.id);
-      return res.json({ message: "Баталгаажуулалтыг хүчингүй болголоо" });
-    } catch (error) {
-      return next(error);
+  auditAction("admin.researcher.revoke", { targetType: "user" }),
+  asyncHandler(async (req, res) => {
+    const target = await findUserById(req.params.id);
+    if (!target) {
+      return res.status(404).json({ message: "Хэрэглэгч олдсонгүй" });
     }
-  }
+    await setUserVerificationStatus(target.id, "submitted");
+    await deletePendingVerificationsForUser(target.id);
+    return res.json({ message: "Баталгаажуулалтыг хүчингүй болголоо" });
+  })
 );
 
 export default router;
