@@ -1,0 +1,370 @@
+openapi: 3.1.0
+info:
+  title: Mongolian 3D Heritage API
+  version: 0.1.0
+  description: Монголын 3D соёлын өвийн платформын REST API.
+servers:
+  - url: http://localhost:4000
+    description: Local development
+tags:
+  - name: Auth
+  - name: Artifacts
+  - name: Reconstruction
+  - name: Admin
+  - name: System
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: heritage_session
+      description: httpOnly session cookie issued by /api/auth/login
+    csrfHeader:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: Token issued by /api/csrf-token cookie value
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              path: { type: string }
+              message: { type: string }
+
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        fullName: { type: string }
+        email: { type: string, format: email }
+        role: { type: string, enum: [visitor, researcher, admin] }
+        organization: { type: string, nullable: true }
+        verificationStatus:
+          type: string
+          enum: [submitted, verified]
+        status: { type: string }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 1 }
+        rememberMe: { type: boolean, default: false }
+
+    Artifact:
+      type: object
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        name: { type: string }
+        nameMn: { type: string }
+        category: { type: string }
+        period: { type: string }
+        province: { type: string }
+        location: { type: string }
+        coordinates:
+          type: object
+          properties:
+            lat: { type: number, nullable: true }
+            lng: { type: number, nullable: true }
+        shortDescription: { type: string }
+        description: { type: string }
+        imageUrl: { type: string }
+        gallery:
+          type: array
+          items: { type: string }
+        modelUrl: { type: string, nullable: true }
+        tags:
+          type: array
+          items: { type: string }
+        status:
+          type: string
+          enum: [NEW, PENDING, APPROVED, REJECTED]
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+security:
+  - sessionCookie: []
+    csrfHeader: []
+
+paths:
+  /api/health:
+    get:
+      tags: [System]
+      summary: Liveness probe
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  uptimeSeconds: { type: integer }
+                  timestamp: { type: string, format: date-time }
+
+  /api/ready:
+    get:
+      tags: [System]
+      summary: Readiness probe (DB шалгана)
+      security: []
+      responses:
+        "200": { description: Ready }
+        "503": { description: Not ready }
+
+  /api/csrf-token:
+    get:
+      tags: [System]
+      summary: CSRF token авах
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  csrfToken: { type: string }
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Имэйл + нууц үгээр нэвтрэх
+      security:
+        - csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Амжилттай нэвтэрсэн
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+              description: heritage_session httpOnly cookie
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: "#/components/schemas/User" }
+        "400": { description: Validation алдаа, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { description: Имэйл/нууц үг буруу }
+        "423": { description: Бүртгэл түр хаагдсан }
+        "429": { description: Хэт олон оролдлого }
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Гарах
+      responses:
+        "204": { description: Амжилттай гарсан }
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Идэвхтэй хэрэглэгчийн мэдээлэл
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: "#/components/schemas/User" }
+        "401": { description: Нэвтрээгүй }
+
+  /api/auth/register-researcher:
+    post:
+      tags: [Auth]
+      summary: Шинэ судлаач бүртгүүлэх
+      security:
+        - csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [fullName, email, password, organization, positionTitle, proofImage]
+              properties:
+                fullName: { type: string }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                organization: { type: string }
+                departmentName: { type: string }
+                positionTitle: { type: string }
+                phoneNumber: { type: string }
+                employeeCode: { type: string }
+                researchFocus: { type: string }
+                proofImage:
+                  type: string
+                  format: binary
+                  description: JPG/PNG/PDF, 10MB хүртэл
+      responses:
+        "201": { description: Үүссэн }
+        "400": { description: Validation алдаа }
+        "409": { description: Имэйл бүртгэлтэй }
+
+  /api/auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Нууц үг сэргээх холбоос хүсэх
+      security:
+        - csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "200": { description: Generic response (enumeration хамгаалалт) }
+
+  /api/auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Шинэ нууц үг тохируулах
+      security:
+        - csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token: { type: string }
+                password: { type: string, minLength: 8 }
+      responses:
+        "200": { description: Шинэчлэгдсэн }
+        "404": { description: Токен буруу }
+        "410": { description: Токений хугацаа дууссан }
+
+  /api/artifacts:
+    get:
+      tags: [Artifacts]
+      summary: Артефактын жагсаалт
+      security: []
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: category
+          schema: { type: string }
+        - in: query
+          name: province
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Artifact" }
+    post:
+      tags: [Artifacts]
+      summary: Шинэ артефакт үүсгэх (researcher эрх)
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      responses:
+        "201": { description: Үүссэн }
+        "401": { description: Нэвтрээгүй }
+        "403": { description: Эрх хүрэхгүй }
+
+  /api/artifacts/{slug}:
+    get:
+      tags: [Artifacts]
+      summary: Артефактын дэлгэрэнгүй
+      security: []
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  artifact: { $ref: "#/components/schemas/Artifact" }
+        "404": { description: Олдсонгүй }
+
+  /api/artifacts/{slug}/approve:
+    post:
+      tags: [Admin]
+      summary: Артефактыг батлах (admin)
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+        "403": { description: Admin эрх шаардана }
+
+  /api/artifacts/{slug}/reject:
+    post:
+      tags: [Admin]
+      summary: Артефактыг буцаах (admin)
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+        "403": { description: Admin эрх шаардана }
+
+  /api/admin/audit-log:
+    get:
+      tags: [Admin]
+      summary: Audit log харах
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, default: 100, maximum: 500 }
+        - in: query
+          name: action
+          schema: { type: string }
+        - in: query
+          name: targetType
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+        "403": { description: Admin эрх шаардана }
