@@ -1,8 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { Router } from "express";
-import multer from "multer";
 import { config } from "../config/env.js";
 import {
   ARTIFACT_STATUSES,
@@ -16,41 +14,27 @@ import {
   updateArtifact
 } from "../repositories/artifactsRepository.js";
 import { requireAuth, requireRole, requireVerifiedResearcher } from "../middleware/auth.js";
+import { auditAction } from "../middleware/audit.js";
+import { createUploadHandler } from "../utils/upload.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
+import { cacheDelete, cacheWrap } from "../utils/cache.js";
+
+async function invalidateArtifactCache(slug) {
+  await Promise.all([
+    cacheDelete("artifacts:list:*"),
+    slug ? cacheDelete(`artifacts:slug:${slug}`) : Promise.resolve()
+  ]);
+}
 
 const router = Router();
-const modelsDir = path.join(config.uploadDir, "models");
-const allowedExtensions = new Set([".glb", ".gltf"]);
 
-await mkdir(modelsDir, { recursive: true });
-
-const modelStorage = multer.diskStorage({
-  destination: (_req, _file, callback) => {
-    callback(null, modelsDir);
-  },
-  filename: (_req, file, callback) => {
-    const extension = path.extname(file.originalname).toLowerCase();
-    callback(null, `${Date.now()}-${randomUUID()}${extension || ".glb"}`);
-  }
-});
-
-const modelUpload = multer({
-  storage: modelStorage,
-  limits: {
-    files: 1,
-    fileSize: 150 * 1024 * 1024
-  },
-  fileFilter: (_req, file, callback) => {
-    const extension = path.extname(file.originalname).toLowerCase();
-
-    if (!allowedExtensions.has(extension)) {
-      const error = new Error("Only .glb or .gltf files are allowed");
-      error.statusCode = 400;
-      callback(error);
-      return;
-    }
-
-    callback(null, true);
-  }
+const modelUpload = await createUploadHandler({
+  destinationDir: path.join(config.uploadDir, "models"),
+  extensionWhitelist: new Set([".glb", ".gltf"]),
+  maxFiles: 1,
+  maxFileSizeBytes: 150 * 1024 * 1024,
+  errorMessage: "Only .glb or .gltf files are allowed",
+  defaultExtension: ".glb"
 });
 
 function buildPublicAssetUrl(req, pathname) {
@@ -151,74 +135,72 @@ function canModifyArtifact(artifact, user) {
   );
 }
 
-router.get("/", async (req, res, next) => {
-  try {
-    const userLatRaw = req.query.userLat;
-    const userLngRaw = req.query.userLng;
-    const userLat =
-      userLatRaw !== undefined && userLatRaw !== "" ? Number(userLatRaw) : null;
-    const userLng =
-      userLngRaw !== undefined && userLngRaw !== "" ? Number(userLngRaw) : null;
+router.get("/", asyncHandler(async (req, res) => {
+  const userLatRaw = req.query.userLat;
+  const userLngRaw = req.query.userLng;
+  const userLat =
+    userLatRaw !== undefined && userLatRaw !== "" ? Number(userLatRaw) : null;
+  const userLng =
+    userLngRaw !== undefined && userLngRaw !== "" ? Number(userLngRaw) : null;
 
-    const data = await getArtifacts({
-      q: (req.query.q || "").toString().trim(),
-      searchBy: (req.query.searchBy || "all").toString().trim(),
-      category: (req.query.category || "").toString().trim(),
-      province: (req.query.province || "").toString().trim(),
-      userLat: Number.isFinite(userLat) ? userLat : null,
-      userLng: Number.isFinite(userLng) ? userLng : null,
-      includeItems:
-        (req.query.includeItems || "true").toString().trim().toLowerCase() !== "false",
-      status: ARTIFACT_STATUSES.APPROVED
-    });
+  const params = {
+    q: (req.query.q || "").toString().trim(),
+    searchBy: (req.query.searchBy || "all").toString().trim(),
+    category: (req.query.category || "").toString().trim(),
+    province: (req.query.province || "").toString().trim(),
+    userLat: Number.isFinite(userLat) ? userLat : null,
+    userLng: Number.isFinite(userLng) ? userLng : null,
+    includeItems:
+      (req.query.includeItems || "true").toString().trim().toLowerCase() !== "false",
+    status: ARTIFACT_STATUSES.APPROVED
+  };
 
-    res.json(data);
-  } catch (error) {
-    next(error);
+  const hasUserLocation = params.userLat !== null && params.userLng !== null;
+  const cacheKey = hasUserLocation
+    ? null
+    : `artifacts:list:${JSON.stringify({
+        q: params.q,
+        searchBy: params.searchBy,
+        category: params.category,
+        province: params.province,
+        includeItems: params.includeItems
+      })}`;
+
+  const data = cacheKey
+    ? await cacheWrap(cacheKey, 60, () => getArtifacts(params))
+    : await getArtifacts(params);
+
+  res.json(data);
+}));
+
+router.get("/mine", requireRole("researcher", "admin"), asyncHandler(async (req, res) => {
+  const items = await getArtifactsByOwner(req.user.id);
+  res.json({ items, total: items.length });
+}));
+
+router.get("/admin/queue", requireRole("admin"), asyncHandler(async (req, res) => {
+  const status = (req.query.status || ARTIFACT_STATUSES.PENDING).toString().toUpperCase();
+
+  if (!Object.values(ARTIFACT_STATUSES).includes(status)) {
+    return res.status(400).json({ message: "Тодорхойгүй төлөв" });
   }
-});
 
-router.get("/mine", requireRole("researcher", "admin"), async (req, res, next) => {
-  try {
-    const items = await getArtifactsByOwner(req.user.id);
-    res.json({ items, total: items.length });
-  } catch (error) {
-    next(error);
+  const items = await getArtifactsByStatus(status);
+  return res.json({ items, total: items.length, status });
+}));
+
+router.get("/:slug", asyncHandler(async (req, res) => {
+  const cacheKey = req.user ? null : `artifacts:slug:${req.params.slug}`;
+  const artifact = cacheKey
+    ? await cacheWrap(cacheKey, 120, () => getArtifactBySlug(req.params.slug))
+    : await getArtifactBySlug(req.params.slug);
+
+  if (!artifact || !canViewArtifact(artifact, req.user)) {
+    return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
   }
-});
 
-router.get("/admin/queue", requireRole("admin"), async (req, res, next) => {
-  try {
-    const status = (req.query.status || ARTIFACT_STATUSES.PENDING).toString().toUpperCase();
-
-    if (!Object.values(ARTIFACT_STATUSES).includes(status)) {
-      return res.status(400).json({ message: "Тодорхойгүй төлөв" });
-    }
-
-    const items = await getArtifactsByStatus(status);
-    return res.json({ items, total: items.length, status });
-  } catch (error) {
-    return next(error);
-  }
-});
-
-router.get("/:slug", async (req, res, next) => {
-  try {
-    const artifact = await getArtifactBySlug(req.params.slug);
-
-    if (!artifact) {
-      return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
-    }
-
-    if (!canViewArtifact(artifact, req.user)) {
-      return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
-    }
-
-    return res.json(artifact);
-  } catch (error) {
-    next(error);
-  }
-});
+  return res.json(artifact);
+}));
 
 router.post(
   "/upload-model",
@@ -239,189 +221,177 @@ router.post(
   }
 );
 
-router.post("/", requireVerifiedResearcher, async (req, res, next) => {
-  try {
-    const artifact = normalizeArtifactPayload(req.body);
-    const validationMessage = validateArtifactPayload(artifact);
+router.post("/", requireVerifiedResearcher, asyncHandler(async (req, res) => {
+  const artifact = normalizeArtifactPayload(req.body);
+  const validationMessage = validateArtifactPayload(artifact);
 
-    if (validationMessage) {
-      return res.status(400).json({ message: validationMessage });
-    }
+  if (validationMessage) {
+    return res.status(400).json({ message: validationMessage });
+  }
 
-    const created = await createArtifact({
-      ...artifact,
-      createdByUserId: req.user.id
+  const created = await createArtifact({
+    ...artifact,
+    createdByUserId: req.user.id
+  });
+  await invalidateArtifactCache(created.slug);
+  return res.status(201).json(created);
+}));
+
+router.put("/:slug", requireAuth, asyncHandler(async (req, res) => {
+  const current = await getArtifactBySlug(req.params.slug);
+
+  if (!current) {
+    return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
+  }
+
+  if (!canModifyArtifact(current, req.user)) {
+    return res.status(403).json({
+      message:
+        "Зөвхөн NEW төлөвт байгаа өөрийн өвийг засах боломжтой. Илгээсэн эсвэл баталгаажсан өвийг засах эрхгүй."
     });
-    return res.status(201).json(created);
-  } catch (error) {
-    next(error);
   }
-});
 
-router.put("/:slug", requireAuth, async (req, res, next) => {
-  try {
-    const current = await getArtifactBySlug(req.params.slug);
+  const artifact = normalizeArtifactPayload(req.body, current.id);
+  artifact.status = current.status;
+  const validationMessage = validateArtifactPayload(artifact);
 
-    if (!current) {
-      return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
-    }
-
-    if (!canModifyArtifact(current, req.user)) {
-      return res.status(403).json({
-        message:
-          "Зөвхөн NEW төлөвт байгаа өөрийн өвийг засах боломжтой. Илгээсэн эсвэл баталгаажсан өвийг засах эрхгүй."
-      });
-    }
-
-    const artifact = normalizeArtifactPayload(req.body, current.id);
-    artifact.status = current.status;
-    const validationMessage = validateArtifactPayload(artifact);
-
-    if (validationMessage) {
-      return res.status(400).json({ message: validationMessage });
-    }
-
-    const updated = await updateArtifact(req.params.slug, artifact);
-    return res.json(updated);
-  } catch (error) {
-    next(error);
+  if (validationMessage) {
+    return res.status(400).json({ message: validationMessage });
   }
-});
 
-router.delete("/:slug", requireAuth, async (req, res, next) => {
-  try {
-    const current = await getArtifactBySlug(req.params.slug);
+  const updated = await updateArtifact(req.params.slug, artifact);
+  await invalidateArtifactCache(req.params.slug);
+  return res.json(updated);
+}));
 
-    if (!current) {
-      return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
-    }
+router.delete("/:slug", requireAuth, asyncHandler(async (req, res) => {
+  const current = await getArtifactBySlug(req.params.slug);
 
-    if (!canModifyArtifact(current, req.user)) {
-      return res.status(403).json({
-        message: "Зөвхөн NEW төлөвт байгаа өөрийн өвийг устгах боломжтой."
-      });
-    }
-
-    const deleted = await deleteArtifact(req.params.slug);
-
-    if (!deleted) {
-      return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
-    }
-
-    return res.status(204).send();
-  } catch (error) {
-    next(error);
+  if (!current) {
+    return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
   }
-});
 
-router.post("/:slug/revert", requireVerifiedResearcher, async (req, res, next) => {
-  try {
-    const current = await getArtifactBySlug(req.params.slug);
-
-    if (!current) {
-      return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
-    }
-
-    if (req.user.role !== "admin" && current.createdByUserId !== req.user.id) {
-      return res.status(403).json({ message: "Зөвхөн өөрийн өвийг засах боломжтой" });
-    }
-
-    if (current.status !== ARTIFACT_STATUSES.REJECTED) {
-      return res
-        .status(409)
-        .json({ message: "Зөвхөн REJECTED төлөвтэй өвийг NEW рүү буцаах боломжтой" });
-    }
-
-    const updated = await setArtifactStatus(req.params.slug, {
-      status: ARTIFACT_STATUSES.NEW
+  if (!canModifyArtifact(current, req.user)) {
+    return res.status(403).json({
+      message: "Зөвхөн NEW төлөвт байгаа өөрийн өвийг устгах боломжтой."
     });
-    return res.json(updated);
-  } catch (error) {
-    next(error);
   }
-});
 
-router.post("/:slug/submit", requireVerifiedResearcher, async (req, res, next) => {
-  try {
-    const current = await getArtifactBySlug(req.params.slug);
+  const deleted = await deleteArtifact(req.params.slug);
 
-    if (!current) {
-      return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
-    }
-
-    if (req.user.role !== "admin" && current.createdByUserId !== req.user.id) {
-      return res.status(403).json({ message: "Зөвхөн өөрийн өвийг илгээх боломжтой" });
-    }
-
-    if (current.status !== ARTIFACT_STATUSES.NEW) {
-      return res
-        .status(409)
-        .json({ message: "Зөвхөн NEW төлөвтэй өвийг шалгуулахаар илгээх боломжтой" });
-    }
-
-    const updated = await setArtifactStatus(req.params.slug, {
-      status: ARTIFACT_STATUSES.PENDING
-    });
-    return res.json(updated);
-  } catch (error) {
-    next(error);
+  if (!deleted) {
+    return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
   }
-});
 
-router.post("/:slug/approve", requireRole("admin"), async (req, res, next) => {
-  try {
-    const current = await getArtifactBySlug(req.params.slug);
+  await invalidateArtifactCache(req.params.slug);
+  return res.status(204).send();
+}));
 
-    if (!current) {
-      return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
-    }
-
-    if (current.status !== ARTIFACT_STATUSES.PENDING) {
-      return res
-        .status(409)
-        .json({ message: "Зөвхөн PENDING төлөвтэй өвийг баталгаажуулах боломжтой" });
-    }
-
-    const updated = await setArtifactStatus(req.params.slug, {
-      status: ARTIFACT_STATUSES.APPROVED,
-      reviewerId: req.user.id,
-      reviewNote: typeof req.body?.note === "string" ? req.body.note : null
-    });
-    return res.json(updated);
-  } catch (error) {
-    next(error);
+function ensureOwnerOrAdmin(artifact, user, message) {
+  if (user.role !== "admin" && artifact.createdByUserId !== user.id) {
+    return message;
   }
-});
+  return null;
+}
 
-router.post("/:slug/reject", requireRole("admin"), async (req, res, next) => {
-  try {
-    const current = await getArtifactBySlug(req.params.slug);
+router.post("/:slug/revert", requireVerifiedResearcher, asyncHandler(async (req, res) => {
+  const current = await getArtifactBySlug(req.params.slug);
 
-    if (!current) {
-      return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
-    }
-
-    if (current.status !== ARTIFACT_STATUSES.PENDING) {
-      return res
-        .status(409)
-        .json({ message: "Зөвхөн PENDING төлөвтэй өвийг татгалзах боломжтой" });
-    }
-
-    const note = typeof req.body?.note === "string" ? req.body.note.trim() : "";
-
-    if (!note) {
-      return res.status(400).json({ message: "Татгалзах шалтгаан тэмдэглэгээ заавал шаардлагатай" });
-    }
-
-    const updated = await setArtifactStatus(req.params.slug, {
-      status: ARTIFACT_STATUSES.REJECTED,
-      reviewerId: req.user.id,
-      reviewNote: note
-    });
-    return res.json(updated);
-  } catch (error) {
-    next(error);
+  if (!current) {
+    return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
   }
-});
+
+  const ownershipError = ensureOwnerOrAdmin(current, req.user, "Зөвхөн өөрийн өвийг засах боломжтой");
+  if (ownershipError) {
+    return res.status(403).json({ message: ownershipError });
+  }
+
+  if (current.status !== ARTIFACT_STATUSES.REJECTED) {
+    return res
+      .status(409)
+      .json({ message: "Зөвхөн REJECTED төлөвтэй өвийг NEW рүү буцаах боломжтой" });
+  }
+
+  const updated = await setArtifactStatus(req.params.slug, {
+    status: ARTIFACT_STATUSES.NEW
+  });
+  await invalidateArtifactCache(req.params.slug);
+  return res.json(updated);
+}));
+
+router.post("/:slug/submit", requireVerifiedResearcher, asyncHandler(async (req, res) => {
+  const current = await getArtifactBySlug(req.params.slug);
+
+  if (!current) {
+    return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
+  }
+
+  const ownershipError = ensureOwnerOrAdmin(current, req.user, "Зөвхөн өөрийн өвийг илгээх боломжтой");
+  if (ownershipError) {
+    return res.status(403).json({ message: ownershipError });
+  }
+
+  if (current.status !== ARTIFACT_STATUSES.NEW) {
+    return res
+      .status(409)
+      .json({ message: "Зөвхөн NEW төлөвтэй өвийг шалгуулахаар илгээх боломжтой" });
+  }
+
+  const updated = await setArtifactStatus(req.params.slug, {
+    status: ARTIFACT_STATUSES.PENDING
+  });
+  await invalidateArtifactCache(req.params.slug);
+  return res.json(updated);
+}));
+
+router.post("/:slug/approve", requireRole("admin"), auditAction("admin.artifact.approve", { targetType: "artifact", targetIdFrom: "params.slug" }), asyncHandler(async (req, res) => {
+  const current = await getArtifactBySlug(req.params.slug);
+
+  if (!current) {
+    return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
+  }
+
+  if (current.status !== ARTIFACT_STATUSES.PENDING) {
+    return res
+      .status(409)
+      .json({ message: "Зөвхөн PENDING төлөвтэй өвийг баталгаажуулах боломжтой" });
+  }
+
+  const updated = await setArtifactStatus(req.params.slug, {
+    status: ARTIFACT_STATUSES.APPROVED,
+    reviewerId: req.user.id,
+    reviewNote: typeof req.body?.note === "string" ? req.body.note : null
+  });
+  await invalidateArtifactCache(req.params.slug);
+  return res.json(updated);
+}));
+
+router.post("/:slug/reject", requireRole("admin"), auditAction("admin.artifact.reject", { targetType: "artifact", targetIdFrom: "params.slug" }), asyncHandler(async (req, res) => {
+  const current = await getArtifactBySlug(req.params.slug);
+
+  if (!current) {
+    return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
+  }
+
+  if (current.status !== ARTIFACT_STATUSES.PENDING) {
+    return res
+      .status(409)
+      .json({ message: "Зөвхөн PENDING төлөвтэй өвийг татгалзах боломжтой" });
+  }
+
+  const note = typeof req.body?.note === "string" ? req.body.note.trim() : "";
+
+  if (!note) {
+    return res.status(400).json({ message: "Татгалзах шалтгаан тэмдэглэгээ заавал шаардлагатай" });
+  }
+
+  const updated = await setArtifactStatus(req.params.slug, {
+    status: ARTIFACT_STATUSES.REJECTED,
+    reviewerId: req.user.id,
+    reviewNote: note
+  });
+  await invalidateArtifactCache(req.params.slug);
+  return res.json(updated);
+}));
 
 export default router;
