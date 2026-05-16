@@ -7,7 +7,7 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "db:seed-admin": "node src/scripts/seedAdmin.js",
-    "migrate": "node-pg-migrate -j sql -m migrations --envPath .env",
+    "migrate": "node-pg-migrate -j sql -m migrations",
     "migrate:up": "npm run migrate -- up",
     "migrate:down": "npm run migrate -- down",
     "migrate:redo": "npm run migrate -- redo",
