@@ -1,8 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir } from "node:fs/promises";
-import path from "node:path";
 import { Router } from "express";
-import multer from "multer";
 import { config } from "../config/env.js";
 import { requireVerifiedResearcher } from "../middleware/auth.js";
 import {
@@ -11,122 +8,104 @@ import {
   listReconstructionJobs
 } from "../repositories/reconstructionRepository.js";
 import { enqueueReconstruction } from "../services/reconstructionWorker.js";
+import { createUploadHandler } from "../utils/upload.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
+import { generateImageVariants, isProcessableImage } from "../utils/imageProcessor.js";
+import { logger } from "../utils/logger.js";
+
+const uploadLogger = logger.child({ module: "reconstruction-upload" });
 
 const router = Router();
 
-await mkdir(config.uploadDir, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, callback) => {
-    callback(null, config.uploadDir);
-  },
-  filename: (_req, file, callback) => {
-    callback(null, `${Date.now()}-${randomUUID()}${path.extname(file.originalname) || ".jpg"}`);
-  }
+const upload = await createUploadHandler({
+  destinationDir: config.uploadDir,
+  mimeWhitelist: new Set(["image/jpeg", "image/jpg", "image/png"]),
+  maxFiles: 60,
+  maxFileSizeBytes: 15 * 1024 * 1024,
+  errorMessage: "Зөвхөн JPG эсвэл PNG форматтай зураг оруулах боломжтой",
+  defaultExtension: ".jpg"
 });
 
-const ALLOWED_PHOTO_MIME_TYPES = new Set(["image/jpeg", "image/jpg", "image/png"]);
+router.get("/", asyncHandler(async (_req, res) => {
+  const items = await listReconstructionJobs();
+  res.json({ items, total: items.length });
+}));
 
-const upload = multer({
-  storage,
-  limits: {
-    files: 60,
-    fileSize: 15 * 1024 * 1024
-  },
-  fileFilter: (_req, file, callback) => {
-    if (!ALLOWED_PHOTO_MIME_TYPES.has(file.mimetype)) {
-      const error = new Error(
-        "Зөвхөн JPG эсвэл PNG форматтай зураг оруулах боломжтой"
-      );
-      error.statusCode = 400;
-      callback(error);
-      return;
-    }
-    callback(null, true);
+router.get("/:id", asyncHandler(async (req, res) => {
+  const item = await getReconstructionJobById(req.params.id);
+
+  if (!item) {
+    return res.status(404).json({ message: "Reconstruction job олдсонгүй" });
   }
-});
 
-router.get("/", async (_req, res, next) => {
-  try {
-    const items = await listReconstructionJobs();
-    res.json({ items, total: items.length });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.get("/:id", async (req, res, next) => {
-  try {
-    const item = await getReconstructionJobById(req.params.id);
-
-    if (!item) {
-      return res.status(404).json({ message: "Reconstruction job олдсонгүй" });
-    }
-
-    return res.json(item);
-  } catch (error) {
-    next(error);
-  }
-});
+  return res.json(item);
+}));
 
 router.post(
   "/upload",
   requireVerifiedResearcher,
   upload.array("images", 60),
-  async (req, res, next) => {
-    try {
-      const files = req.files || [];
+  asyncHandler(async (req, res) => {
+    const files = req.files || [];
 
-      if (!files.length) {
-        return res.status(400).json({ message: "Дор хаяж нэг зураг оруулна уу" });
-      }
-
-      const created = await createPhotoSetWithJob({
-        photoSet: {
-          id: randomUUID(),
-          title: req.body.title?.trim() || `Туршилтын багц ${Date.now()}`,
-          description: req.body.description?.trim() || "",
-          captureNotes: req.body.captureNotes?.trim() || "",
-          status: "queue"
-        },
-        images: files.map((file, index) => ({
-          id: randomUUID(),
-          originalName: file.originalname,
-          storedName: file.filename,
-          mimeType: file.mimetype,
-          sizeBytes: file.size,
-          filePath: file.path,
-          publicUrl: `/uploads/${file.filename}`,
-          sortOrder: index
-        })),
-        job: {
-          id: randomUUID(),
-          status: "queue",
-          stage: "upload_complete",
-          progressPercent: 5,
-          engine: "photogrammetry-placeholder",
-          engineMode: "mvp-simulation",
-          estimatedQuality: "үнэлээгүй",
-          resultSummary: "Зургууд амжилттай хадгалагдлаа. Processing эхлэхийг хүлээж байна.",
-          generatedModelUrl: null,
-          generatedFormat: null,
-          processingLog: [
-            {
-              createdAt: new Date().toISOString(),
-              stage: "upload_complete",
-              message: `${files.length} зураг хүлээн авч reconstruction job үүсгэлээ.`
-            }
-          ]
-        },
-        createdByUserId: req.user?.id || null
-      });
-
-      enqueueReconstruction(created.id);
-      res.status(201).json(created);
-    } catch (error) {
-      next(error);
+    if (!files.length) {
+      return res.status(400).json({ message: "Дор хаяж нэг зураг оруулна уу" });
     }
-  }
+
+    await Promise.all(
+      files.map(async (file) => {
+        if (!isProcessableImage(file.mimetype)) return;
+        try {
+          file.variants = await generateImageVariants(file.path);
+        } catch (error) {
+          uploadLogger.warn({ err: error, file: file.filename }, "Variant үүсгэх алдаа");
+        }
+      })
+    );
+
+    const created = await createPhotoSetWithJob({
+      photoSet: {
+        id: randomUUID(),
+        title: req.body.title?.trim() || `Туршилтын багц ${Date.now()}`,
+        description: req.body.description?.trim() || "",
+        captureNotes: req.body.captureNotes?.trim() || "",
+        status: "queue"
+      },
+      images: files.map((file, index) => ({
+        id: randomUUID(),
+        originalName: file.originalname,
+        storedName: file.filename,
+        mimeType: file.mimetype,
+        sizeBytes: file.size,
+        filePath: file.path,
+        publicUrl: `/uploads/${file.filename}`,
+        sortOrder: index
+      })),
+      job: {
+        id: randomUUID(),
+        status: "queue",
+        stage: "upload_complete",
+        progressPercent: 5,
+        engine: "photogrammetry-placeholder",
+        engineMode: "mvp-simulation",
+        estimatedQuality: "үнэлээгүй",
+        resultSummary: "Зургууд амжилттай хадгалагдлаа. Processing эхлэхийг хүлээж байна.",
+        generatedModelUrl: null,
+        generatedFormat: null,
+        processingLog: [
+          {
+            createdAt: new Date().toISOString(),
+            stage: "upload_complete",
+            message: `${files.length} зураг хүлээн авч reconstruction job үүсгэлээ.`
+          }
+        ]
+      },
+      createdByUserId: req.user?.id || null
+    });
+
+    enqueueReconstruction(created.id);
+    res.status(201).json(created);
+  })
 );
 
 export default router;
