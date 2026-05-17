@@ -18,20 +18,11 @@ import {
   findUserByEmail,
   findUserById,
   listResearchersWithVerifications,
-  registerFailedLogin,
-  resetFailedLoginCount,
   setUserVerificationStatus,
   updateUserPassword
 } from "../repositories/authRepository.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
-import {
-  loginLimiter,
-  passwordResetLimiter,
-  registerLimiter,
-  verificationResendLimiter
-} from "../middleware/rateLimit.js";
 import { validate } from "../middleware/validate.js";
-import { auditAction } from "../middleware/audit.js";
 import {
   forgotPasswordSchema,
   loginSchema,
@@ -99,7 +90,6 @@ async function issueVerification(user) {
 
 router.post(
   "/register-researcher",
-  registerLimiter,
   upload.single("proofImage"),
   validate({ body: registerResearcherSchema }),
   asyncHandler(async (req, res) => {
@@ -164,48 +154,27 @@ router.post(
 
 router.post(
   "/login",
-  loginLimiter,
   validate({ body: loginSchema }),
   asyncHandler(async (req, res) => {
-    const { email, password, rememberMe } = req.body;
+    const { email, password } = req.body;
 
     const userRow = await findUserByEmail(email);
 
-    if (!userRow) {
+    if (!userRow || !verifyPassword(password, userRow.password_hash)) {
       return res.status(401).json({ message: "Имэйл эсвэл нууц үг буруу байна" });
     }
-
-    if (userRow.locked_until && new Date(userRow.locked_until) > new Date()) {
-      const minutesLeft = Math.ceil(
-        (new Date(userRow.locked_until).getTime() - Date.now()) / 60000
-      );
-      return res.status(423).json({
-        message: `Бүртгэл түр хаагдсан. ${minutesLeft} минутын дараа дахин оролдоно уу.`
-      });
-    }
-
-    if (!verifyPassword(password, userRow.password_hash)) {
-      await registerFailedLogin(userRow.id);
-      return res.status(401).json({ message: "Имэйл эсвэл нууц үг буруу байна" });
-    }
-
-    await resetFailedLoginCount(userRow.id);
 
     const token = generateToken();
-    const remember = Boolean(rememberMe);
-    const initialTtlMs = remember
-      ? 1000 * 60 * 60 * 24 * 7
-      : 1000 * 60 * 60 * 2;
+    const SESSION_TTL_MS = 1000 * 60 * 60 * 24;
 
     await createSession({
       id: randomUUID(),
       userId: userRow.id,
       tokenHash: hashToken(token),
-      expiresAt: new Date(Date.now() + initialTtlMs).toISOString(),
-      rememberMe: remember
+      expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString()
     });
 
-    setAuthCookie(res, token, { rememberMe: remember });
+    setAuthCookie(res, token);
 
     return res.json({
       user: {
@@ -253,7 +222,6 @@ const PASSWORD_RESET_TTL_MS = 1000 * 60 * 60;
 
 router.post(
   "/forgot-password",
-  passwordResetLimiter,
   validate({ body: forgotPasswordSchema }),
   asyncHandler(async (req, res) => {
     const email = req.body.email;
@@ -295,7 +263,7 @@ router.post(
         payload.previewUrl = sendResult.previewUrl;
       }
     } catch (sendError) {
-      req.log?.error?.({ err: sendError }, "Password reset email илгээгдсэнгүй");
+      console.error("[email] password reset илгээх алдаа:", sendError.message);
     }
 
     return res.json(payload);
@@ -304,7 +272,6 @@ router.post(
 
 router.post(
   "/reset-password",
-  passwordResetLimiter,
   validate({ body: resetPasswordSchema }),
   asyncHandler(async (req, res) => {
     const { token, password } = req.body;
@@ -360,7 +327,7 @@ router.post(
   })
 );
 
-router.post("/resend-verification", verificationResendLimiter, requireAuth, asyncHandler(async (req, res) => {
+router.post("/resend-verification", requireAuth, asyncHandler(async (req, res) => {
     const userRow = await findUserById(req.user.id);
 
     if (!userRow) {
@@ -387,7 +354,6 @@ router.get("/admin/researchers", requireRole("admin"), asyncHandler(async (_req,
 router.post(
   "/admin/researchers/:id/verify",
   requireRole("admin"),
-  auditAction("admin.researcher.verify", { targetType: "user" }),
   asyncHandler(async (req, res) => {
     const target = await findUserById(req.params.id);
     if (!target) {
@@ -405,7 +371,6 @@ router.post(
 router.post(
   "/admin/researchers/:id/revoke",
   requireRole("admin"),
-  auditAction("admin.researcher.revoke", { targetType: "user" }),
   asyncHandler(async (req, res) => {
     const target = await findUserById(req.params.id);
     if (!target) {

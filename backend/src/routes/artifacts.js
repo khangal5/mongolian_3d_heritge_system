@@ -14,17 +14,8 @@ import {
   updateArtifact
 } from "../repositories/artifactsRepository.js";
 import { requireAuth, requireRole, requireVerifiedResearcher } from "../middleware/auth.js";
-import { auditAction } from "../middleware/audit.js";
 import { createUploadHandler } from "../utils/upload.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { cacheDelete, cacheWrap } from "../utils/cache.js";
-
-async function invalidateArtifactCache(slug) {
-  await Promise.all([
-    cacheDelete("artifacts:list:*"),
-    slug ? cacheDelete(`artifacts:slug:${slug}`) : Promise.resolve()
-  ]);
-}
 
 const router = Router();
 
@@ -143,7 +134,7 @@ router.get("/", asyncHandler(async (req, res) => {
   const userLng =
     userLngRaw !== undefined && userLngRaw !== "" ? Number(userLngRaw) : null;
 
-  const params = {
+  const data = await getArtifacts({
     q: (req.query.q || "").toString().trim(),
     searchBy: (req.query.searchBy || "all").toString().trim(),
     category: (req.query.category || "").toString().trim(),
@@ -153,22 +144,7 @@ router.get("/", asyncHandler(async (req, res) => {
     includeItems:
       (req.query.includeItems || "true").toString().trim().toLowerCase() !== "false",
     status: ARTIFACT_STATUSES.APPROVED
-  };
-
-  const hasUserLocation = params.userLat !== null && params.userLng !== null;
-  const cacheKey = hasUserLocation
-    ? null
-    : `artifacts:list:${JSON.stringify({
-        q: params.q,
-        searchBy: params.searchBy,
-        category: params.category,
-        province: params.province,
-        includeItems: params.includeItems
-      })}`;
-
-  const data = cacheKey
-    ? await cacheWrap(cacheKey, 60, () => getArtifacts(params))
-    : await getArtifacts(params);
+  });
 
   res.json(data);
 }));
@@ -190,10 +166,7 @@ router.get("/admin/queue", requireRole("admin"), asyncHandler(async (req, res) =
 }));
 
 router.get("/:slug", asyncHandler(async (req, res) => {
-  const cacheKey = req.user ? null : `artifacts:slug:${req.params.slug}`;
-  const artifact = cacheKey
-    ? await cacheWrap(cacheKey, 120, () => getArtifactBySlug(req.params.slug))
-    : await getArtifactBySlug(req.params.slug);
+  const artifact = await getArtifactBySlug(req.params.slug);
 
   if (!artifact || !canViewArtifact(artifact, req.user)) {
     return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
@@ -233,7 +206,6 @@ router.post("/", requireVerifiedResearcher, asyncHandler(async (req, res) => {
     ...artifact,
     createdByUserId: req.user.id
   });
-  await invalidateArtifactCache(created.slug);
   return res.status(201).json(created);
 }));
 
@@ -260,7 +232,6 @@ router.put("/:slug", requireAuth, asyncHandler(async (req, res) => {
   }
 
   const updated = await updateArtifact(req.params.slug, artifact);
-  await invalidateArtifactCache(req.params.slug);
   return res.json(updated);
 }));
 
@@ -283,7 +254,6 @@ router.delete("/:slug", requireAuth, asyncHandler(async (req, res) => {
     return res.status(404).json({ message: "Өвийн бүртгэл олдсонгүй" });
   }
 
-  await invalidateArtifactCache(req.params.slug);
   return res.status(204).send();
 }));
 
@@ -315,7 +285,6 @@ router.post("/:slug/revert", requireVerifiedResearcher, asyncHandler(async (req,
   const updated = await setArtifactStatus(req.params.slug, {
     status: ARTIFACT_STATUSES.NEW
   });
-  await invalidateArtifactCache(req.params.slug);
   return res.json(updated);
 }));
 
@@ -340,11 +309,10 @@ router.post("/:slug/submit", requireVerifiedResearcher, asyncHandler(async (req,
   const updated = await setArtifactStatus(req.params.slug, {
     status: ARTIFACT_STATUSES.PENDING
   });
-  await invalidateArtifactCache(req.params.slug);
   return res.json(updated);
 }));
 
-router.post("/:slug/approve", requireRole("admin"), auditAction("admin.artifact.approve", { targetType: "artifact", targetIdFrom: "params.slug" }), asyncHandler(async (req, res) => {
+router.post("/:slug/approve", requireRole("admin"), asyncHandler(async (req, res) => {
   const current = await getArtifactBySlug(req.params.slug);
 
   if (!current) {
@@ -362,11 +330,10 @@ router.post("/:slug/approve", requireRole("admin"), auditAction("admin.artifact.
     reviewerId: req.user.id,
     reviewNote: typeof req.body?.note === "string" ? req.body.note : null
   });
-  await invalidateArtifactCache(req.params.slug);
   return res.json(updated);
 }));
 
-router.post("/:slug/reject", requireRole("admin"), auditAction("admin.artifact.reject", { targetType: "artifact", targetIdFrom: "params.slug" }), asyncHandler(async (req, res) => {
+router.post("/:slug/reject", requireRole("admin"), asyncHandler(async (req, res) => {
   const current = await getArtifactBySlug(req.params.slug);
 
   if (!current) {
@@ -390,7 +357,6 @@ router.post("/:slug/reject", requireRole("admin"), auditAction("admin.artifact.r
     reviewerId: req.user.id,
     reviewNote: note
   });
-  await invalidateArtifactCache(req.params.slug);
   return res.json(updated);
 }));
 

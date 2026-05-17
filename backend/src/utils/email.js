@@ -1,7 +1,4 @@
 import { config } from "../config/env.js";
-import { logger } from "./logger.js";
-
-const emailLogger = logger.child({ module: "email" });
 
 export function isWhitelistedEmail(email) {
   if (config.emailDomainBypass) {
@@ -101,10 +98,7 @@ async function sendViaEthereal({ to, subject, text, html }) {
       secure: etherealAccount.smtp.secure,
       auth: { user: etherealAccount.user, pass: etherealAccount.pass }
     });
-    emailLogger.info(
-      { account: etherealAccount.user },
-      "Ethereal test account үүсгэсэн (https://ethereal.email)"
-    );
+    console.log(`[email] Ethereal test account: ${etherealAccount.user}`);
   }
 
   const info = await etherealTransport.sendMail({
@@ -121,23 +115,23 @@ async function sendViaEthereal({ to, subject, text, html }) {
 async function dispatchEmail({ to, subject, text, html, link, label }) {
   if (config.resendApiKey) {
     await sendViaResend({ to, subject, text, html });
-    emailLogger.info({ to, label, channel: "resend" }, "Имэйл илгээгдсэн");
+    console.log(`[email] Resend → ${to} (${label})`);
     return { delivered: "resend", link };
   }
 
   if (config.smtpHost) {
     await sendViaSmtp({ to, subject, text, html });
-    emailLogger.info({ to, label, channel: "smtp" }, "Имэйл илгээгдсэн");
+    console.log(`[email] SMTP → ${to} (${label})`);
     return { delivered: "smtp", link };
   }
 
   if (config.emailUseEthereal) {
     const previewUrl = await sendViaEthereal({ to, subject, text, html });
-    emailLogger.info({ to, label, channel: "ethereal", previewUrl }, "Ethereal preview бэлэн");
+    console.log(`[email] Ethereal preview: ${previewUrl}`);
     return { delivered: "ethereal", link, previewUrl };
   }
 
-  emailLogger.info({ to, label, channel: "console", link }, "Dev fallback — линкийг console-д харуулсан");
+  console.log(`[email] dev console → ${to}: ${link}`);
   return { delivered: "console", link };
 }
 

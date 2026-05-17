@@ -84,40 +84,6 @@ export async function findUserByEmail(email) {
   return result.rows[0] || null;
 }
 
-const MAX_FAILED_ATTEMPTS = 5;
-const LOCKOUT_MINUTES = 15;
-
-export async function registerFailedLogin(userId) {
-  const result = await query(
-    `
-      UPDATE users
-      SET
-        failed_login_count = failed_login_count + 1,
-        locked_until = CASE
-          WHEN failed_login_count + 1 >= $2 THEN NOW() + ($3 || ' minutes')::INTERVAL
-          ELSE locked_until
-        END,
-        updated_at = NOW()
-      WHERE id = $1
-      RETURNING failed_login_count, locked_until
-    `,
-    [userId, MAX_FAILED_ATTEMPTS, String(LOCKOUT_MINUTES)]
-  );
-
-  return result.rows[0] || null;
-}
-
-export async function resetFailedLoginCount(userId) {
-  await query(
-    `
-      UPDATE users
-      SET failed_login_count = 0, locked_until = NULL, updated_at = NOW()
-      WHERE id = $1
-    `,
-    [userId]
-  );
-}
-
 export async function findUserById(id) {
   const result = await query(
     `
@@ -139,10 +105,10 @@ export async function findUserById(id) {
 export async function createSession(session) {
   await query(
     `
-      INSERT INTO auth_sessions (id, user_id, token_hash, expires_at, remember_me)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO auth_sessions (id, user_id, token_hash, expires_at)
+      VALUES ($1, $2, $3, $4)
     `,
-    [session.id, session.userId, session.tokenHash, session.expiresAt, Boolean(session.rememberMe)]
+    [session.id, session.userId, session.tokenHash, session.expiresAt]
   );
 }
 
@@ -167,16 +133,7 @@ export async function findSessionWithUserByTokenHash(tokenHash) {
 
 export async function touchSession(sessionId) {
   await query(
-    `
-      UPDATE auth_sessions
-      SET
-        last_used_at = NOW(),
-        expires_at = CASE
-          WHEN remember_me THEN LEAST(NOW() + INTERVAL '7 days', created_at + INTERVAL '30 days')
-          ELSE LEAST(NOW() + INTERVAL '2 hours', created_at + INTERVAL '24 hours')
-        END
-      WHERE id = $1
-    `,
+    `UPDATE auth_sessions SET last_used_at = NOW() WHERE id = $1`,
     [sessionId]
   );
 }
@@ -283,15 +240,7 @@ export async function deletePendingPasswordResets(userId) {
 
 export async function updateUserPassword(userId, passwordHash) {
   await query(
-    `
-      UPDATE users
-      SET
-        password_hash = $2,
-        failed_login_count = 0,
-        locked_until = NULL,
-        updated_at = NOW()
-      WHERE id = $1
-    `,
+    `UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1`,
     [userId, passwordHash]
   );
 }

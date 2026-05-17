@@ -5,44 +5,6 @@ const DEFAULT_FETCH_OPTIONS = {
   credentials: "include"
 };
 
-const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
-
-let csrfToken = null;
-let csrfBootstrap = null;
-
-async function ensureCsrfToken() {
-  if (csrfToken) return csrfToken;
-
-  if (!csrfBootstrap) {
-    csrfBootstrap = fetch(`${API_BASE_URL}/csrf-token`, DEFAULT_FETCH_OPTIONS)
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => {
-        csrfToken = data?.csrfToken || null;
-        return csrfToken;
-      })
-      .finally(() => {
-        csrfBootstrap = null;
-      });
-  }
-  await csrfBootstrap;
-  return csrfToken;
-}
-
-async function buildFetchOptions(options = {}) {
-  const method = (options.method || "GET").toUpperCase();
-  const merged = { ...DEFAULT_FETCH_OPTIONS, ...options, method };
-
-  if (MUTATING_METHODS.has(method)) {
-    const token = await ensureCsrfToken();
-    merged.headers = {
-      ...(options.headers || {}),
-      ...(token ? { "X-CSRF-Token": token } : {})
-    };
-  }
-
-  return merged;
-}
-
 function buildError(response, message) {
   const error = new Error(message);
   error.status = response.status;
@@ -69,8 +31,10 @@ async function request(path) {
 }
 
 async function requestWithOptions(path, options) {
-  const fetchOptions = await buildFetchOptions(options);
-  const response = await fetch(`${API_BASE_URL}${path}`, fetchOptions);
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...DEFAULT_FETCH_OPTIONS,
+    ...options
+  });
 
   if (!response.ok) {
     let message = `Request failed with status ${response.status}`;

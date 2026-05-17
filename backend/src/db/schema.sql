@@ -1,5 +1,3 @@
--- Up Migration
-
 CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -24,8 +22,6 @@ CREATE TABLE IF NOT EXISTS users (
   verification_document_name TEXT,
   verification_document_url TEXT,
   verification_status TEXT NOT NULL DEFAULT 'submitted',
-  failed_login_count INTEGER NOT NULL DEFAULT 0,
-  locked_until TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -36,7 +32,6 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash TEXT NOT NULL UNIQUE,
-  remember_me BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   expires_at TIMESTAMPTZ NOT NULL,
   last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -89,17 +84,6 @@ CREATE TABLE IF NOT EXISTS artifacts (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
-ALTER TABLE artifacts
-  DROP COLUMN IF EXISTS province,
-  DROP COLUMN IF EXISTS location,
-  DROP COLUMN IF EXISTS latitude,
-  DROP COLUMN IF EXISTS longitude,
-  DROP COLUMN IF EXISTS geom,
-  DROP COLUMN IF EXISTS image_url,
-  DROP COLUMN IF EXISTS gallery,
-  DROP COLUMN IF EXISTS model_url,
-  DROP COLUMN IF EXISTS model_embed_url;
 
 CREATE INDEX IF NOT EXISTS idx_artifacts_slug ON artifacts (slug);
 CREATE INDEX IF NOT EXISTS idx_artifacts_category ON artifacts (category);
@@ -187,16 +171,3 @@ CREATE TABLE IF NOT EXISTS reconstruction_jobs (
 
 CREATE INDEX IF NOT EXISTS idx_reconstruction_jobs_photo_set_id ON reconstruction_jobs (photo_set_id);
 CREATE INDEX IF NOT EXISTS idx_reconstruction_jobs_status ON reconstruction_jobs (status);
-
--- Down Migration
-
-DROP TABLE IF EXISTS reconstruction_jobs;
-DROP TABLE IF EXISTS photo_images;
-DROP TABLE IF EXISTS photo_sets;
-DROP TABLE IF EXISTS media_files;
-DROP TABLE IF EXISTS locations;
-DROP TABLE IF EXISTS artifacts;
-DROP TABLE IF EXISTS password_reset_tokens;
-DROP TABLE IF EXISTS email_verifications;
-DROP TABLE IF EXISTS auth_sessions;
-DROP TABLE IF EXISTS users;

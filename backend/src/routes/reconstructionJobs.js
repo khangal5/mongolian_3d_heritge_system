@@ -10,10 +10,6 @@ import {
 import { enqueueReconstruction } from "../services/reconstructionWorker.js";
 import { createUploadHandler } from "../utils/upload.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { generateImageVariants, isProcessableImage } from "../utils/imageProcessor.js";
-import { logger } from "../utils/logger.js";
-
-const uploadLogger = logger.child({ module: "reconstruction-upload" });
 
 const router = Router();
 
@@ -51,17 +47,6 @@ router.post(
     if (!files.length) {
       return res.status(400).json({ message: "Дор хаяж нэг зураг оруулна уу" });
     }
-
-    await Promise.all(
-      files.map(async (file) => {
-        if (!isProcessableImage(file.mimetype)) return;
-        try {
-          file.variants = await generateImageVariants(file.path);
-        } catch (error) {
-          uploadLogger.warn({ err: error, file: file.filename }, "Variant үүсгэх алдаа");
-        }
-      })
-    );
 
     const created = await createPhotoSetWithJob({
       photoSet: {

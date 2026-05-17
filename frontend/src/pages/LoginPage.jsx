@@ -6,8 +6,7 @@ import Layout from "../components/Layout.jsx";
 
 const initialLogin = {
   email: "",
-  password: "",
-  rememberMe: false
+  password: ""
 };
 
 export default function LoginPage() {
@@ -81,16 +80,6 @@ export default function LoginPage() {
           </div>
 
           <div className="auth-card-row">
-            <label className="remember-me">
-              <input
-                type="checkbox"
-                checked={loginForm.rememberMe}
-                onChange={(event) =>
-                  setLoginForm((current) => ({ ...current, rememberMe: event.target.checked }))
-                }
-              />
-              <span>Намайг сана (30 хоног)</span>
-            </label>
             <Link to="/forgot-password" className="secondary-link">
               Нууц үгээ мартсан уу?
             </Link>
