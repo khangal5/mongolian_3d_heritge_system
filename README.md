@@ -4,21 +4,21 @@
 
 ## Stack
 
-- Frontend: React + Vite
-- Backend: Express
-- Database: PostgreSQL
+- Frontend: React + Vite, Three.js, Leaflet
+- Backend: Node.js + Express
+- Database: PostgreSQL + PostGIS
 - Upload: local file storage
-- 3D туршилтын урсгал: photogrammetry placeholder pipeline
+- Authentication: httpOnly cookie session + scrypt password hash
+- 3D туршилтын урсгал: photogrammetry placeholder pipeline (sharp + Laplacian variance)
 
-## Одоогийн боломжууд
+## Боломжууд
 
-- Өвийн бүртгэлийн каталог
-- Хайлт болон шүүлтүүр
-- Дэлгэрэнгүй хуудас
-- PostgreSQL дээр суурилсан өгөгдөл удирдлага
-- Олон зураг upload хийж reconstruction job үүсгэх туршилтын модуль
-- Судлаач бүртгэл, нэвтрэлт, role-based эрх
-- Баталгаажуулах баримтын зурагтай илүү бүрэн судлаачийн бүртгэл
+- Олдворын каталог + хайлт, шүүлт, газарзүйн зайгаар эрэмбэлэх
+- Олдворын дэлгэрэнгүй хуудас (3D viewer + Leaflet газрын зураг)
+- Судлаач бүртгэл, и-мэйл баталгаажуулалт, нэвтрэлт, нууц үг сэргээх
+- Role-based access control (visitor / researcher / admin)
+- NEW → PENDING → APPROVED/REJECTED олдворын статусын урсгал
+- Reconstruction Lab: зураг upload + чанарын автомат шалгалт + queue
 
 ## Local Development
 
@@ -29,8 +29,9 @@ PowerShell дээр `npm` script execution асуудал гарвал `npm.cmd`
 ```powershell
 cd backend
 npm.cmd install
-npm.cmd run db:init
-npm.cmd run dev
+npm.cmd run db:init       # schema үүсгэх (нэг удаа)
+npm.cmd run db:seed-admin # анхдагч админ үүсгэх (нэг удаа)
+npm.cmd run dev           # сервер ажиллуулах
 ```
 
 ### Frontend
@@ -48,62 +49,90 @@ npm.cmd run dev
 3. `mongolian_heritage` database үүсгэнэ.
 4. `npm.cmd run db:init` ажиллуулж table-уудаа үүсгэнэ.
 
-Schema шинэчлэгдсэн үед `db:init`-ийг дахин ажиллуулж шинэ table, column-уудаа үүсгэнэ.
+Schema шинэчлэгдсэн үед `db:init`-ийг дахин ажиллуулна — `CREATE TABLE IF NOT EXISTS` ашигладаг тул байгаа өгөгдөл алдагдахгүй.
 
-## Судлаачийн эрхийн урсгал
+## Хэрэглэгчийн урсгал
 
-Системд дараах auth урсгал нэмэгдсэн:
+### Судлаачаар бүртгүүлэх
 
-- Тусдаа `register` болон `login` хуудас
-- Байгууллагын мэдээлэл, албан тушаал, байгууллагын имэйл оруулах
-- Баталгаажуулах үнэмлэх эсвэл баримтын зураг upload хийх
-- Session token localStorage дээр хадгалах
-- Зөвхөн `researcher` эсвэл `admin` role-той хэрэглэгч шинэ дурсгал нэмэх
+1. `/register` хуудас → хувийн + албаны мэдээлэл + баталгаажуулах баримтын зураг.
+2. Албан и-мэйл хаягт ирсэн баталгаажуулах холбоосыг дарах.
+3. Админ судлаачийн баталгаажуулалтыг хянана (`/admin/researchers`).
 
-Турших дараалал:
+### Нэвтрэх
 
-1. Backend schema-г шинэчил:
-```powershell
-cd backend
-npm.cmd run db:init
-```
-2. Frontend дээр `/register` хуудас руу орж шинэ хэрэглэгчийн бүртгэл үүсгэ.
-3. `/login` хуудас дээр нэвтэр.
-4. `/artifacts/new` хуудас руу орж шинэ дурсгал нэм.
+- `/login` хуудас → имэйл + нууц үг → `heritage_session` httpOnly cookie тавигдана.
+- Cookie 24 цаг хүчинтэй; logout-оор устгагдана.
 
-## Фотограмметрийн туршилтын урсгал
+### Нууц үг сэргээх
 
-Системд `/reconstruction-lab` хуудас нэмэгдсэн. Энэ хэсэг дээр:
+1. `/login` дээрх "Нууц үгээ мартсан уу?" холбоос.
+2. `/forgot-password` → имэйл хаяг.
+3. И-мэйлээр ирсэн холбоосоор `/reset-password?token=...`.
+4. Шинэ нууц үг → бүх session устаж дахин нэвтэрнэ.
 
-- олон зураг upload хийх
-- PostgreSQL дээр photo set, images, reconstruction job хадгалах
-- queue, processing, completed төлвийг харах
-- reconstruction чанарын туршилтын тайлан авах
+### Олдвор нэмэх (researcher)
 
-Одоогийн хязгаарлалт:
+1. `/artifacts/new` → олдворын мета мэдээлэл + зураг URL + 3D загвар (GLB upload эсвэл URL).
+2. Хадгалах → `NEW` төлөвт орно.
+3. "Илгээх" → `PENDING` болж админ шалгана.
+4. Админ `APPROVED` болговол public-д харагдана. `REJECTED` бол шалтгаантай судлаач рүү буцна.
 
-- Энэ worker нь бодит mesh эсвэл GLB файл үүсгэхгүй
-- зөвхөн pipeline, өгөгдлийн бүтэц, upload flow, tracking-ийг турших зориулалттай
+### Reconstruction Lab (researcher)
 
-Дараагийн шатанд дараах engine-үүдийг холбоход бэлэн:
+1. `/reconstruction-lab` → зургийн багц + тайлбар.
+2. Чанарын автомат шалгалт (`sharp`-аар Laplacian variance) → багц `queue` төлөвт.
+3. Админ локал орчинд Meshroom/RealityCapture-аар боловсруулна.
 
-- COLMAP
-- Meshroom
-- OpenMVG + OpenMVS
+## Орчин үеийн тохиргоо (env vars)
 
-## API
+`backend/.env` дотор шаардлагатай:
 
-- `GET /api`
-- `GET /api/health`
-- `GET /api/artifacts`
-- `GET /api/artifacts/:slug`
-- `POST /api/artifacts`
-- `PUT /api/artifacts/:slug`
-- `DELETE /api/artifacts/:slug`
+| Хувьсагч | Заавал | Тайлбар |
+|---|---|---|
+| `DATABASE_URL` | ✅ | PostgreSQL холболтын URL |
+| `PORT` | ❌ | Default 4000 |
+| `CORS_ORIGIN` | ✅ | Frontend домэйн (cookie credentials шаардлагатай) |
+| `PUBLIC_APP_URL` | ✅ | Имэйл линкэнд хэрэглэх frontend URL |
+| `EMAIL_DOMAIN_WHITELIST` | ❌ | Зөвшөөрөгдсөн домэйн жагсаалт (default: `edu.mn,ac.mn,gov.mn,gmail.com`) |
+| `EMAIL_DOMAIN_BYPASS` | ❌ | `true` бол домэйн шалгалт алгасна (dev) |
+| `RESEND_API_KEY` | ❌ | Resend ашиглах бол |
+| `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD` | ❌ | SMTP ашиглах бол |
+| `EMAIL_USE_ETHERAL` | ❌ | `true` бол Ethereal preview |
+
+Хэрэв ямар нэг email provider тохируулаагүй бол dev console-д линк гарна.
+
+## API endpoint-ууд
+
+### Public
+- `GET /api` — endpoint listing
+- `GET /api/health` — DB-тэй холбогдсон эсэх
+- `GET /api/artifacts` — баталгаажсан олдворын жагсаалт
+- `GET /api/artifacts/:slug` — олдворын дэлгэрэнгүй
+
+### Auth
 - `POST /api/auth/register-researcher`
 - `POST /api/auth/login`
-- `GET /api/auth/me`
 - `POST /api/auth/logout`
-- `GET /api/reconstruction-jobs`
-- `GET /api/reconstruction-jobs/:id`
-- `POST /api/reconstruction-jobs/upload`
+- `GET /api/auth/me`
+- `POST /api/auth/verify-email`
+- `POST /api/auth/resend-verification`
+- `POST /api/auth/forgot-password`
+- `POST /api/auth/reset-password`
+
+### Researcher
+- `POST /api/artifacts` — шинэ олдвор
+- `PUT /api/artifacts/:slug` — засах (NEW төлөвт)
+- `DELETE /api/artifacts/:slug` — устгах (NEW төлөвт)
+- `POST /api/artifacts/:slug/submit` — шалгуулахаар илгээх
+- `POST /api/artifacts/:slug/revert` — REJECTED → NEW
+- `POST /api/artifacts/upload-model` — 3D файл upload
+- `POST /api/reconstruction-jobs/upload` — зургийн багц байршуулах
+
+### Admin
+- `POST /api/artifacts/:slug/approve`
+- `POST /api/artifacts/:slug/reject` (note шаардлагатай)
+- `GET /api/artifacts/admin/queue`
+- `GET /api/auth/admin/researchers`
+- `POST /api/auth/admin/researchers/:id/verify`
+- `POST /api/auth/admin/researchers/:id/revoke`

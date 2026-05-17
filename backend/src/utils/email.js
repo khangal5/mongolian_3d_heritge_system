@@ -135,12 +135,22 @@ async function dispatchEmail({ to, subject, text, html, link, label }) {
   return { delivered: "console", link };
 }
 
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export async function sendVerificationEmail({ to, fullName, token }) {
   const link = `${config.publicAppUrl}/verify-email?token=${encodeURIComponent(token)}`;
+  const safeName = escapeHtml(fullName);
   const subject = "Имэйл баталгаажуулах — Монголын 3D өвийн сан";
   const text = `Сайн байна уу, ${fullName}!\n\nДараах холбоосоор имэйлээ баталгаажуулна уу:\n${link}\n\nЭнэ холбоос 24 цагийн дараа хүчингүй болно.`;
   const html = `
-    <p>Сайн байна уу, <strong>${fullName}</strong>!</p>
+    <p>Сайн байна уу, <strong>${safeName}</strong>!</p>
     <p>Дараах товчоор имэйлээ баталгаажуулна уу:</p>
     <p><a href="${link}" style="background:#2b1b13;color:#fff8ec;padding:10px 18px;border-radius:999px;text-decoration:none;">Имэйл баталгаажуулах</a></p>
     <p>Эсвэл линкийг хуулж нээнэ үү:<br/><a href="${link}">${link}</a></p>
@@ -152,10 +162,11 @@ export async function sendVerificationEmail({ to, fullName, token }) {
 
 export async function sendPasswordResetEmail({ to, fullName, token }) {
   const link = `${config.publicAppUrl}/reset-password?token=${encodeURIComponent(token)}`;
+  const safeName = escapeHtml(fullName);
   const subject = "Нууц үг сэргээх — Монголын 3D өвийн сан";
   const text = `Сайн байна уу, ${fullName || ""}!\n\nТаны бүртгэлийн нууц үгийг сэргээх хүсэлт ирлээ. Дараах холбоосоор шинэ нууц үгээ тохируулна уу:\n${link}\n\nЭнэ холбоос 1 цагийн дараа хүчингүй болно. Хэрэв та энэ хүсэлтийг хийгээгүй бол энэ имэйлийг үл хэрэгсээрэй.`;
   const html = `
-    <p>Сайн байна уу, <strong>${fullName || ""}</strong>!</p>
+    <p>Сайн байна уу, <strong>${safeName}</strong>!</p>
     <p>Таны бүртгэлийн нууц үгийг сэргээх хүсэлт ирлээ. Дараах товчоор шинэ нууц үгээ тохируулна уу:</p>
     <p><a href="${link}" style="background:#2b1b13;color:#fff8ec;padding:10px 18px;border-radius:999px;text-decoration:none;">Шинэ нууц үг тохируулах</a></p>
     <p>Эсвэл линкийг хуулж нээнэ үү:<br/><a href="${link}">${link}</a></p>

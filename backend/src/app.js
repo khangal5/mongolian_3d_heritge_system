@@ -74,8 +74,12 @@ export function createApp() {
     console.error(error);
     const statusCode =
       error.statusCode || (error.code === "LIMIT_FILE_SIZE" ? 400 : 500);
+
+    const isProdServerError = statusCode >= 500 && config.nodeEnv === "production";
     res.status(statusCode).json({
-      message: error.message || "Internal server error"
+      message: isProdServerError
+        ? "Internal server error"
+        : error.message || "Internal server error"
     });
   });
 

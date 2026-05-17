@@ -13,6 +13,7 @@ const DashboardPage = lazy(() => import("./pages/DashboardPage.jsx"));
 const AdminQueuePage = lazy(() => import("./pages/AdminQueuePage.jsx"));
 const AdminResearchersPage = lazy(() => import("./pages/AdminResearchersPage.jsx"));
 const VerifyEmailPage = lazy(() => import("./pages/VerifyEmailPage.jsx"));
+const NotFoundPage = lazy(() => import("./pages/NotFoundPage.jsx"));
 
 function RouteFallback() {
   return <p className="feedback">Хуудсыг ачааллаж байна...</p>;
@@ -35,6 +36,7 @@ export default function App() {
         <Route path="/admin/queue" element={<AdminQueuePage />} />
         <Route path="/admin/researchers" element={<AdminResearchersPage />} />
         <Route path="/reconstruction-lab" element={<ReconstructionLabPage />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Suspense>
   );

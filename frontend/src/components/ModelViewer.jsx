@@ -87,6 +87,7 @@ export default function ModelViewer({ modelUrl, title }) {
   const mountRef = useRef(null);
   const [status, setStatus] = useState("idle");
   const [message, setMessage] = useState("");
+  const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -247,7 +248,7 @@ export default function ModelViewer({ modelUrl, title }) {
       renderer.dispose();
       mount.innerHTML = "";
     };
-  }, [modelUrl, title]);
+  }, [modelUrl, title, retryToken]);
 
   return (
     <div className="model-viewer-shell">
@@ -255,6 +256,15 @@ export default function ModelViewer({ modelUrl, title }) {
       <div className={`model-viewer-status model-viewer-status-${status}`}>
         <strong>Three.js WebGL Viewer</strong>
         <span>{message}</span>
+        {status === "error" && (
+          <button
+            type="button"
+            className="action-button compact"
+            onClick={() => setRetryToken((value) => value + 1)}
+          >
+            Дахин ачааллах
+          </button>
+        )}
       </div>
     </div>
   );
