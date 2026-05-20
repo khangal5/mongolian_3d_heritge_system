@@ -4,11 +4,9 @@ import {
   AmbientLight,
   Box3,
   Color,
-  CylinderGeometry,
   DirectionalLight,
   Group,
   IcosahedronGeometry,
-  MathUtils,
   Mesh,
   MeshStandardMaterial,
   PerspectiveCamera,
@@ -109,7 +107,7 @@ export default function ModelViewer({ modelUrl, title }) {
     const scene = new Scene();
     scene.background = new Color("#0f141b");
 
-    const camera = new PerspectiveCamera(45, 1, 0.1, 100);
+    const camera = new PerspectiveCamera(45, 1, 0.01, 100);
     camera.position.set(2.6, 1.8, 3.2);
 
     const renderer = new WebGLRenderer({ antialias: true, alpha: true });
@@ -130,18 +128,11 @@ export default function ModelViewer({ modelUrl, title }) {
     const root = new Group();
     scene.add(root);
 
-    const pedestal = new Mesh(
-      new CylinderGeometry(1.2, 1.35, 0.16, 48),
-      new MeshStandardMaterial({ color: "#10151d" })
-    );
-    pedestal.position.set(0, -1.08, 0);
-    scene.add(pedestal);
-
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.minDistance = 0.8;
-    controls.maxDistance = 12;
+    controls.minDistance = 0.5;
+    controls.maxDistance = 20;
     controls.autoRotate = true;
     controls.autoRotateSpeed = 0.9;
 
@@ -178,23 +169,28 @@ export default function ModelViewer({ modelUrl, title }) {
 
           root.add(gltf.scene);
 
+          // Normalize: scale the model so its largest dimension fits a
+          // fixed target size, then center the entire bbox at the origin.
+          // The pedestal sits below; we don't try to land the model on it
+          // because photogrammetry meshes often have thin tails that
+          // confuse bounds.min.y and leave the visible body floating.
+          const TARGET_SIZE = 2;
+
+          const rawBounds = new Box3().setFromObject(gltf.scene);
+          const rawSize = rawBounds.getSize(new Vector3());
+          const maxAxis = Math.max(rawSize.x, rawSize.y, rawSize.z) || 1;
+          gltf.scene.scale.setScalar(TARGET_SIZE / maxAxis);
+
           const bounds = new Box3().setFromObject(gltf.scene);
-          const size = bounds.getSize(new Vector3());
           const center = bounds.getCenter(new Vector3());
-          const maxAxis = Math.max(size.x, size.y, size.z) || 1;
+          gltf.scene.position.x -= center.x;
+          gltf.scene.position.y -= center.y;
+          gltf.scene.position.z -= center.z;
 
-          gltf.scene.position.sub(center);
-          gltf.scene.position.y -= bounds.min.y;
-          gltf.scene.position.y -= size.y * 0.5;
-
-          const distance = Math.max(maxAxis * 2.1, 2.6);
-          camera.position.set(distance * 0.82, distance * 0.55, distance);
-          controls.target.set(0, Math.max(size.y * 0.12, 0), 0);
+          const distance = TARGET_SIZE * 1.9;
+          camera.position.set(distance * 0.75, distance * 0.55, distance);
+          controls.target.set(0, 0, 0);
           controls.update();
-
-          const scale = 1 / Math.max(maxAxis / 1.8, 1);
-          const clampedScale = MathUtils.clamp(scale, 0.6, 2.2);
-          gltf.scene.scale.setScalar(clampedScale);
 
           setStatus("ready");
           setMessage(`${title || "3D model"} Three.js WebGL viewer дээр амжилттай ачааллаа.`);
@@ -237,8 +233,6 @@ export default function ModelViewer({ modelUrl, title }) {
       }
 
       controls.dispose();
-      pedestal.geometry.dispose();
-      disposeMaterial(pedestal.material);
       root.traverse((child) => {
         if (child instanceof Mesh) {
           child.geometry?.dispose?.();
@@ -253,10 +247,9 @@ export default function ModelViewer({ modelUrl, title }) {
   return (
     <div className="model-viewer-shell">
       <div ref={mountRef} className="model-viewer-canvas" />
-      <div className={`model-viewer-status model-viewer-status-${status}`}>
-        <strong>Three.js WebGL Viewer</strong>
-        <span>{message}</span>
-        {status === "error" && (
+      {status === "error" && (
+        <div className={`model-viewer-status model-viewer-status-${status}`}>
+          <span>{message}</span>
           <button
             type="button"
             className="action-button compact"
@@ -264,8 +257,8 @@ export default function ModelViewer({ modelUrl, title }) {
           >
             Дахин ачааллах
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
