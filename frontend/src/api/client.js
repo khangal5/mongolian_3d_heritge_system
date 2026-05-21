@@ -20,28 +20,47 @@ function networkError() {
   return error;
 }
 
+const RETRY_DELAYS_MS = [300, 800];
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function request(path) {
-  let response;
-  try {
-    response = await fetch(`${API_BASE_URL}${path}`, DEFAULT_FETCH_OPTIONS);
-  } catch {
-    throw networkError();
-  }
+  let lastError;
 
-  if (!response.ok) {
+  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+    let response;
+    try {
+      response = await fetch(`${API_BASE_URL}${path}`, DEFAULT_FETCH_OPTIONS);
+    } catch {
+      lastError = networkError();
+      if (attempt < RETRY_DELAYS_MS.length) {
+        await sleep(RETRY_DELAYS_MS[attempt]);
+        continue;
+      }
+      throw lastError;
+    }
+
+    if (response.ok) return response.json();
+
+    // Retry transient server errors; do not retry 4xx.
+    if (response.status >= 500 && attempt < RETRY_DELAYS_MS.length) {
+      await sleep(RETRY_DELAYS_MS[attempt]);
+      continue;
+    }
+
     let message = `Request failed with status ${response.status}`;
-
     try {
       const data = await response.json();
       message = data.message || message;
     } catch {
       // Ignore non-JSON error responses.
     }
-
     throw buildError(response, message);
   }
 
-  return response.json();
+  throw lastError ?? new Error("Request failed");
 }
 
 async function requestWithOptions(path, options) {
@@ -87,14 +106,39 @@ function fromCache(key) {
   const entry = cache.get(key);
   if (!entry) return null;
   if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
-    cache.delete(key);
     return null;
   }
   return entry.data;
 }
 
+// Returns whatever is in the cache, even if past TTL. Used as a fallback
+// when the backend is unreachable so the UI can keep showing stale data
+// instead of an error.
+function fromStaleCache(key) {
+  return cache.get(key)?.data ?? null;
+}
+
 function intoCache(key, data) {
   cache.set(key, { data, timestamp: Date.now() });
+}
+
+async function requestWithStaleFallback(path, cacheKey) {
+  try {
+    const data = await request(path);
+    intoCache(cacheKey, data);
+    return data;
+  } catch (err) {
+    const stale = fromStaleCache(cacheKey);
+    if (stale) {
+      if (typeof console !== "undefined") {
+        console.warn(
+          `[api] using stale cache for ${path} after error: ${err.message}`
+        );
+      }
+      return stale;
+    }
+    throw err;
+  }
 }
 
 export function invalidateCache() {
@@ -115,18 +159,14 @@ export async function getArtifacts(params = {}) {
   const cached = fromCache(cacheKey);
   if (cached) return cached;
 
-  const data = await request(`/artifacts${suffix}`);
-  intoCache(cacheKey, data);
-  return data;
+  return requestWithStaleFallback(`/artifacts${suffix}`, cacheKey);
 }
 
 export async function getArtifactBySlug(slug) {
   const cacheKey = `artifact:${slug}`;
   const cached = fromCache(cacheKey);
   if (cached) return cached;
-  const data = await request(`/artifacts/${slug}`);
-  intoCache(cacheKey, data);
-  return data;
+  return requestWithStaleFallback(`/artifacts/${slug}`, cacheKey);
 }
 
 export function getReconstructionJobs() {
@@ -146,6 +186,20 @@ export function uploadReconstructionJob(formData) {
 
 export function uploadArtifactModel(formData) {
   return requestWithOptions("/artifacts/upload-model", {
+    method: "POST",
+    body: formData
+  });
+}
+
+export function uploadArtifactImage(formData) {
+  return requestWithOptions("/artifacts/upload-image", {
+    method: "POST",
+    body: formData
+  });
+}
+
+export function uploadArtifactImages(formData) {
+  return requestWithOptions("/artifacts/upload-images", {
     method: "POST",
     body: formData
   });

@@ -4,6 +4,8 @@ import {
   createArtifactRequest,
   getArtifactBySlug,
   updateArtifactRequest,
+  uploadArtifactImage,
+  uploadArtifactImages,
   uploadArtifactModel
 } from "../api/client.js";
 import { getStoredAuth } from "../auth.js";
@@ -12,6 +14,8 @@ import UserSidebar from "../components/UserSidebar.jsx";
 import MapPicker from "../components/MapPicker.jsx";
 import { MONGOLIA_PROVINCES } from "../constants/provinces.js";
 import { ARTIFACT_CATEGORIES } from "../constants/categories.js";
+import { ARTIFACT_PERIODS } from "../constants/periods.js";
+import { SUMS_BY_PROVINCE } from "../constants/sums.js";
 
 const initialForm = {
   slug: "",
@@ -66,6 +70,10 @@ export default function NewArtifactPage() {
   const isEditMode = Boolean(editSlug);
   const [form, setForm] = useState(initialForm);
   const [modelFile, setModelFile] = useState(null);
+  const [imageFile, setImageFile] = useState(null);
+  const [galleryFiles, setGalleryFiles] = useState([]);
+  const [imageFileDragOver, setImageFileDragOver] = useState(false);
+  const [galleryDragOver, setGalleryDragOver] = useState(false);
   const [imageDragOver, setImageDragOver] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -132,12 +140,39 @@ export default function NewArtifactPage() {
     return response.modelUrl;
   }
 
+  async function resolveImageUrl() {
+    if (!imageFile) return form.imageUrl;
+    const payload = new FormData();
+    payload.set("image", imageFile);
+    setUploadStatus("uploading");
+    const response = await uploadArtifactImage(payload);
+    setUploadStatus("uploaded");
+    return response.imageUrl;
+  }
+
+  async function resolveGalleryUrls() {
+    const urlList = form.gallery
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (galleryFiles.length === 0) return urlList;
+
+    const payload = new FormData();
+    for (const file of galleryFiles) payload.append("images", file);
+    setUploadStatus("uploading");
+    const response = await uploadArtifactImages(payload);
+    setUploadStatus("uploaded");
+    return [...urlList, ...response.items.map((it) => it.imageUrl)];
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
     setMessage("");
     setError("");
 
     try {
+      const imageUrl = await resolveImageUrl();
+      const gallery = await resolveGalleryUrls();
       const modelUrl = await resolveModelUrl();
       const payload = {
         slug: form.slug || slugify(form.name),
@@ -153,9 +188,9 @@ export default function NewArtifactPage() {
         },
         shortDescription: form.shortDescription,
         description: form.description,
-        imageUrl: form.imageUrl,
+        imageUrl,
         modelUrl,
-        gallery: form.gallery.split(",").map((s) => s.trim()).filter(Boolean),
+        gallery,
         tags: form.tags.split(",").map((s) => s.trim()).filter(Boolean)
       };
 
@@ -169,6 +204,8 @@ export default function NewArtifactPage() {
       }
 
       setModelFile(null);
+      setImageFile(null);
+      setGalleryFiles([]);
       setUploadStatus("idle");
       setTimeout(() => navigate("/dashboard"), 600);
     } catch (requestError) {
@@ -246,13 +283,17 @@ export default function NewArtifactPage() {
 
             <div className="field">
               <label htmlFor="period">Он цаг *</label>
-              <input
+              <select
                 id="period"
                 value={form.period}
                 onChange={(e) => setForm((c) => ({ ...c, period: e.target.value }))}
-                placeholder="Жишээ: МЭӨ I мянган"
                 required
-              />
+              >
+                <option value="">Сонгоно уу</option>
+                {ARTIFACT_PERIODS.map((value) => (
+                  <option key={value} value={value}>{value}</option>
+                ))}
+              </select>
             </div>
 
             <div className="field af-full">
@@ -306,7 +347,15 @@ export default function NewArtifactPage() {
               <select
                 id="province"
                 value={form.province}
-                onChange={(e) => setForm((c) => ({ ...c, province: e.target.value }))}
+                onChange={(e) =>
+                  setForm((c) => ({
+                    ...c,
+                    province: e.target.value,
+                    // Reset location when province changes so a stale sum
+                    // isn't carried over to a different aimag.
+                    location: ""
+                  }))
+                }
                 required
               >
                 <option value="">Сонгоно уу</option>
@@ -317,14 +366,25 @@ export default function NewArtifactPage() {
             </div>
 
             <div className="field">
-              <label htmlFor="location">Сум / газрын нэр *</label>
-              <input
+              <label htmlFor="location">Сум / дүүрэг *</label>
+              <select
                 id="location"
                 value={form.location}
                 onChange={(e) => setForm((c) => ({ ...c, location: e.target.value }))}
-                placeholder="Жаргалант"
                 required
-              />
+                disabled={!form.province}
+              >
+                <option value="">
+                  {form.province ? "Сонгоно уу" : "Эхлээд аймгаа сонгоно уу"}
+                </option>
+                {(SUMS_BY_PROVINCE[form.province] || []).map((value) => (
+                  <option key={value} value={value}>{value}</option>
+                ))}
+                {form.location &&
+                  !(SUMS_BY_PROVINCE[form.province] || []).includes(form.location) && (
+                    <option value={form.location}>{form.location}</option>
+                  )}
+              </select>
             </div>
 
             <div className="field">
@@ -370,15 +430,71 @@ export default function NewArtifactPage() {
 
           <div className="form-section-body">
             <div className="field af-full">
-              <label htmlFor="imageUrl">Гол зурагны URL *</label>
+              <label>Гол зураг *</label>
+              <div
+                className={`drop-zone ${imageFileDragOver ? "is-over" : ""} ${imageFile ? "has-file" : ""}`}
+                onDragOver={(e) => { e.preventDefault(); setImageFileDragOver(true); }}
+                onDragLeave={() => setImageFileDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setImageFileDragOver(false);
+                  const file = e.dataTransfer.files?.[0];
+                  if (file && file.type.startsWith("image/")) {
+                    setImageFile(file);
+                    setForm((c) => ({ ...c, imageUrl: "" }));
+                  }
+                }}
+              >
+                <input
+                  id="imageFile"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] || null;
+                    setImageFile(file);
+                    if (file) setForm((c) => ({ ...c, imageUrl: "" }));
+                  }}
+                  hidden
+                />
+                <label htmlFor="imageFile" className="drop-zone-label">
+                  <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21 15 16 10 5 21" />
+                  </svg>
+                  {imageFile ? (
+                    <>
+                      <strong>{imageFile.name}</strong>
+                      <span>Дахин сонгох бол энд дарна</span>
+                    </>
+                  ) : (
+                    <>
+                      <strong>Файлаа чирэх эсвэл сонгох</strong>
+                      <span>.jpg, .png, .webp эсвэл .gif · 10MB хүртэл</span>
+                    </>
+                  )}
+                </label>
+              </div>
+              {imageFile && (
+                <div className="image-preview">
+                  <img src={URL.createObjectURL(imageFile)} alt="preview" />
+                </div>
+              )}
+            </div>
+
+            <div className="field af-full">
+              <label htmlFor="imageUrl">Эсвэл зурагны URL</label>
               <input
                 id="imageUrl"
                 value={form.imageUrl}
-                onChange={(e) => setForm((c) => ({ ...c, imageUrl: e.target.value }))}
+                onChange={(e) => {
+                  setForm((c) => ({ ...c, imageUrl: e.target.value }));
+                  if (e.target.value) setImageFile(null);
+                }}
                 placeholder="https://.../main.jpg"
-                required
+                required={!imageFile}
               />
-              {form.imageUrl && (
+              {form.imageUrl && !imageFile && (
                 <div className="image-preview">
                   <img src={form.imageUrl} alt="preview" />
                 </div>
@@ -386,14 +502,84 @@ export default function NewArtifactPage() {
             </div>
 
             <div className="field af-full">
-              <label htmlFor="gallery">Нэмэлт зургуудын URL</label>
+              <label>Нэмэлт зургууд</label>
+              <div
+                className={`drop-zone ${galleryDragOver ? "is-over" : ""} ${galleryFiles.length ? "has-file" : ""}`}
+                onDragOver={(e) => { e.preventDefault(); setGalleryDragOver(true); }}
+                onDragLeave={() => setGalleryDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setGalleryDragOver(false);
+                  const dropped = Array.from(e.dataTransfer.files || [])
+                    .filter((f) => f.type.startsWith("image/"));
+                  if (dropped.length) {
+                    setGalleryFiles((curr) => [...curr, ...dropped]);
+                  }
+                }}
+              >
+                <input
+                  id="galleryFiles"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  multiple
+                  onChange={(event) => {
+                    const picked = Array.from(event.target.files || []);
+                    if (picked.length) {
+                      setGalleryFiles((curr) => [...curr, ...picked]);
+                    }
+                    event.target.value = "";
+                  }}
+                  hidden
+                />
+                <label htmlFor="galleryFiles" className="drop-zone-label">
+                  <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21 15 16 10 5 21" />
+                  </svg>
+                  {galleryFiles.length ? (
+                    <>
+                      <strong>{galleryFiles.length} файл сонгогдсон</strong>
+                      <span>Дахин нэмэх бол энд дарна</span>
+                    </>
+                  ) : (
+                    <>
+                      <strong>Файлуудаа чирэх эсвэл сонгох</strong>
+                      <span>Олон зураг сонгож болно · .jpg, .png, .webp, .gif</span>
+                    </>
+                  )}
+                </label>
+              </div>
+              {galleryFiles.length > 0 && (
+                <div className="gallery-preview">
+                  {galleryFiles.map((file, idx) => (
+                    <div key={`${file.name}-${idx}`} className="gallery-preview-item">
+                      <img src={URL.createObjectURL(file)} alt={file.name} />
+                      <button
+                        type="button"
+                        className="gallery-preview-remove"
+                        onClick={() =>
+                          setGalleryFiles((curr) => curr.filter((_, i) => i !== idx))
+                        }
+                        aria-label="Хасах"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="field af-full">
+              <label htmlFor="gallery">Эсвэл нэмэлт зургийн URL</label>
               <input
                 id="gallery"
                 value={form.gallery}
                 onChange={(e) => setForm((c) => ({ ...c, gallery: e.target.value }))}
                 placeholder="https://.../img1.jpg, https://.../img2.jpg"
               />
-              <p className="field-help">Таслалаар тусгаарлан олон URL оруулж болно.</p>
+              <p className="field-help">Таслалаар тусгаарлан олон URL оруулж болно. Файл сонгосон бол URL-ууд хамт нэмэгдэнэ.</p>
             </div>
 
             <div

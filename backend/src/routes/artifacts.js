@@ -28,6 +28,24 @@ const modelUpload = await createUploadHandler({
   defaultExtension: ".glb"
 });
 
+const imageUpload = await createUploadHandler({
+  destinationDir: path.join(config.uploadDir, "images"),
+  extensionWhitelist: new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]),
+  maxFiles: 1,
+  maxFileSizeBytes: 10 * 1024 * 1024,
+  errorMessage: "Only .jpg, .png, .webp, or .gif images are allowed",
+  defaultExtension: ".jpg"
+});
+
+const galleryUpload = await createUploadHandler({
+  destinationDir: path.join(config.uploadDir, "images"),
+  extensionWhitelist: new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]),
+  maxFiles: 20,
+  maxFileSizeBytes: 10 * 1024 * 1024,
+  errorMessage: "Only .jpg, .png, .webp, or .gif images are allowed",
+  defaultExtension: ".jpg"
+});
+
 function buildPublicAssetUrl(req, pathname) {
   return `${req.protocol}://${req.get("host")}${pathname}`;
 }
@@ -135,11 +153,17 @@ router.get("/", asyncHandler(async (req, res) => {
   const userLng =
     userLngRaw !== undefined && userLngRaw !== "" ? Number(userLngRaw) : null;
 
+  const has3dRaw = (req.query.has3d || "").toString().trim().toLowerCase();
+  const has3d = has3dRaw === "1" || has3dRaw === "true" ? true
+    : has3dRaw === "0" || has3dRaw === "false" ? false
+    : null;
+
   const data = await getArtifacts({
     q: (req.query.q || "").toString().trim(),
     searchBy: (req.query.searchBy || "all").toString().trim(),
     category: (req.query.category || "").toString().trim(),
     province: (req.query.province || "").toString().trim(),
+    has3d,
     userLat: Number.isFinite(userLat) ? userLat : null,
     userLng: Number.isFinite(userLng) ? userLng : null,
     sort: (req.query.sort || "newest").toString().trim(),
@@ -193,6 +217,47 @@ router.post(
       publicUrl: publicPath,
       modelUrl: buildPublicAssetUrl(req, publicPath)
     });
+  }
+);
+
+router.post(
+  "/upload-image",
+  requireVerifiedResearcher,
+  imageUpload.single("image"),
+  (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ message: "Image file required" });
+    }
+
+    const publicPath = `/uploads/images/${req.file.filename}`;
+
+    return res.status(201).json({
+      fileName: req.file.originalname,
+      publicUrl: publicPath,
+      imageUrl: buildPublicAssetUrl(req, publicPath)
+    });
+  }
+);
+
+router.post(
+  "/upload-images",
+  requireVerifiedResearcher,
+  galleryUpload.array("images", 20),
+  (req, res) => {
+    if (!req.files?.length) {
+      return res.status(400).json({ message: "At least one image required" });
+    }
+
+    const items = req.files.map((file) => {
+      const publicPath = `/uploads/images/${file.filename}`;
+      return {
+        fileName: file.originalname,
+        publicUrl: publicPath,
+        imageUrl: buildPublicAssetUrl(req, publicPath)
+      };
+    });
+
+    return res.status(201).json({ items });
   }
 );
 

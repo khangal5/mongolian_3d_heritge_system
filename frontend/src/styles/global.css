@@ -4161,6 +4161,46 @@ textarea {
   display: block;
 }
 
+.gallery-preview {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.gallery-preview-item {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+.gallery-preview-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.gallery-preview-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gallery-preview-remove:hover {
+  background: rgba(220, 53, 69, 0.9);
+}
+
 .drop-zone {
   border: 2px dashed var(--line-strong);
   border-radius: 12px;
@@ -4869,6 +4909,19 @@ textarea {
   height: 100%;
   object-fit: cover;
 }
+.artifact-list-placeholder,
+.artifact-card-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1a2030 0%, #0f141b 100%);
+  color: rgba(255, 255, 255, 0.25);
+}
+.artifact-card-placeholder {
+  aspect-ratio: 4 / 3;
+}
 .artifact-list-3d {
   position: absolute;
   top: 6px;
@@ -5497,7 +5550,8 @@ textarea {
   align-self: center;
 }
 
-.catalog-search input {
+.catalog-search input,
+.catalog-search-select {
   flex: 1;
   border: none;
   background: transparent;
@@ -5507,6 +5561,10 @@ textarea {
   font-family: inherit;
   outline: none;
   min-width: 0;
+}
+.catalog-search-select {
+  appearance: none;
+  cursor: pointer;
 }
 
 .catalog-clear {
