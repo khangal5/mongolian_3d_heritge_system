@@ -1,11 +1,30 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
 export default function ArtifactListItem({ artifact }) {
+  const [imageBroken, setImageBroken] = useState(false);
+  const hasModel = Boolean(artifact.modelUrl);
+  const showImage = artifact.imageUrl && !imageBroken;
+
   return (
     <Link to={`/artifacts/${artifact.slug}`} className="artifact-list-row">
       <div className="artifact-list-thumb">
-        <img src={artifact.imageUrl} alt={artifact.name} />
-        <span className="artifact-list-3d">3D</span>
+        {showImage ? (
+          <img
+            src={artifact.imageUrl}
+            alt={artifact.name}
+            onError={() => setImageBroken(true)}
+          />
+        ) : (
+          <div className="artifact-list-placeholder" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <polyline points="21 15 16 10 5 21" />
+            </svg>
+          </div>
+        )}
+        {hasModel && <span className="artifact-list-3d">3D</span>}
       </div>
 
       <div className="artifact-list-body">

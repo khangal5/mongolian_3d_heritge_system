@@ -120,6 +120,7 @@ export async function getArtifacts({
   searchBy = "all",
   category = "",
   province = "",
+  has3d = null,
   userLat = null,
   userLng = null,
   sort = "newest",
@@ -150,6 +151,16 @@ export async function getArtifacts({
   if (province) {
     params.push(province);
     conditions.push(`LOWER(l.province) = LOWER($${params.length})`);
+  }
+
+  if (has3d === true) {
+    conditions.push(
+      `EXISTS (SELECT 1 FROM media_files mf WHERE mf.artifact_id = a.id AND mf.file_type = 'model')`
+    );
+  } else if (has3d === false) {
+    conditions.push(
+      `NOT EXISTS (SELECT 1 FROM media_files mf WHERE mf.artifact_id = a.id AND mf.file_type = 'model')`
+    );
   }
 
   const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
