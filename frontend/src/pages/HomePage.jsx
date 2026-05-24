@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getArtifacts } from "../api/client.js";
+import { getStoredAuth } from "../auth.js";
 import ArtifactCard from "../components/ArtifactCard.jsx";
 import Layout from "../components/Layout.jsx";
 
@@ -165,15 +166,17 @@ export default function HomePage() {
         )}
       </section>
 
-      <section className="showcase-cta-band">
-        <div>
-          <h2>Та судлаач уу?</h2>
-          <p>Албан имэйлээрээ бүртгүүлж олдвор бүртгэх, 3D загвар оруулах эрхтэй болоорой.</p>
-        </div>
-        <Link to="/register" className="showcase-cta-primary inline">
-          Судлаачаар бүртгүүлэх →
-        </Link>
-      </section>
+      {!getStoredAuth()?.user && (
+        <section className="showcase-cta-band">
+          <div>
+            <h2>Та судлаач уу?</h2>
+            <p>Албан имэйлээрээ бүртгүүлж олдвор бүртгэх, 3D загвар оруулах эрхтэй болоорой.</p>
+          </div>
+          <Link to="/register" className="showcase-cta-primary inline">
+            Судлаачаар бүртгүүлэх →
+          </Link>
+        </section>
+      )}
     </Layout>
   );
 }
