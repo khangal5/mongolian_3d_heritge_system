@@ -11,7 +11,7 @@
     "dev:frontend": "npm --prefix frontend run dev",
     "dev:backend": "npm --prefix backend run dev",
     "build:frontend": "npm --prefix frontend run build",
-    "start": "npm --prefix backend run start"
+    "start": "node backend/src/server.js"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
