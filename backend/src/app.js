@@ -17,7 +17,25 @@ export function createApp() {
   }
 
   app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
-  app.use(cors({ origin: config.corsOrigin, credentials: true }));
+  // Allow exact configured origins plus any *.vercel.app preview URL so
+  // branch/PR deploys can hit the API too.
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        if (config.corsOrigin.includes(origin)) return callback(null, true);
+        if (config.corsOrigin.includes("*")) return callback(null, true);
+        try {
+          const host = new URL(origin).hostname;
+          if (host.endsWith(".vercel.app")) return callback(null, true);
+        } catch {
+          // fall through to reject
+        }
+        callback(new Error(`Origin ${origin} not allowed by CORS`));
+      },
+      credentials: true
+    })
+  );
   app.use(express.json({ limit: "1mb" }));
   app.use(cookieParser());
   app.use("/uploads", express.static(config.uploadDir));
