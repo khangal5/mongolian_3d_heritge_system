@@ -3,8 +3,17 @@ import { config } from "../config/env.js";
 
 const { Pool } = pg;
 
+// Managed Postgres providers (Neon, Render, Supabase) require TLS. Enable it
+// whenever the URL doesn't already specify sslmode=disable.
+const url = config.databaseUrl || "";
+const wantsSsl =
+  config.nodeEnv === "production" ||
+  /sslmode=require|sslmode=verify/i.test(url);
+const disableSsl = /sslmode=disable/i.test(url);
+
 export const pool = new Pool({
-  connectionString: config.databaseUrl
+  connectionString: config.databaseUrl,
+  ssl: wantsSsl && !disableSsl ? { rejectUnauthorized: false } : false
 });
 
 export async function query(text, params = []) {

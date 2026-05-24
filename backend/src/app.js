@@ -23,6 +23,11 @@ export function createApp() {
   app.use("/uploads", express.static(config.uploadDir));
   app.use(optionalAuth);
 
+  // Lightweight liveness probe for Render/load balancers — does not touch DB.
+  app.get("/api/healthz", (_req, res) => {
+    res.json({ status: "ok" });
+  });
+
   app.get("/api/health", (_req, res) => {
     checkDatabaseConnection()
       .then((database) => {
