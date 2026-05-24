@@ -1,24 +1,36 @@
+# Render deployment — backend only.
+# Frontend нь Vercel руу тус тусдаа deploy хийгдэнэ (vercel.json).
+# Database нь Neon (managed Postgres + PostGIS) ашиглана.
+
 services:
   - type: web
-    name: mongolian-heritage-api
+    name: heritage-api
     runtime: node
     rootDir: backend
+    plan: free
     buildCommand: npm install
     startCommand: npm run start
+    healthCheckPath: /api/healthz
     envVars:
+      - key: NODE_ENV
+        value: production
       - key: PORT
         value: 4000
-      - key: CORS_ORIGIN
-        value: https://your-frontend-domain.example
+      - key: TRUST_PROXY
+        value: "1"
+      - key: UPLOAD_DIR
+        value: uploads
+      # Neon-ийн өгсөн connection string — sslmode=require-той ирнэ
+      # Жишээ: postgresql://USER:PASS@ep-xxx.neon.tech/dbname?sslmode=require
       - key: DATABASE_URL
         sync: false
-
-  - type: web
-    name: mongolian-heritage-frontend
-    runtime: static
-    rootDir: frontend
-    buildCommand: npm install && npm run build
-    staticPublishPath: dist
-    envVars:
-      - key: VITE_API_BASE_URL
-        value: https://your-api-domain.example/api
+      # Vercel-аас өгсөн frontend URL (https://heritage-xxx.vercel.app)
+      - key: CORS_ORIGIN
+        sync: false
+      - key: PUBLIC_APP_URL
+        sync: false
+      # И-мэйл (заавал биш — хоосон бол dev console линктэй ажилладаг)
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false

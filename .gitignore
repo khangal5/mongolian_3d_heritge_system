@@ -1,5 +1,6 @@
 node_modules/
 dist/
+.claude/
 .env
 .env.*
 !.env.example
@@ -7,3 +8,5 @@ coverage/
 .DS_Store
 *.log
 DIPLOM__1_/
+backend/uploads/
+model/

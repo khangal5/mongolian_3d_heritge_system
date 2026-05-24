@@ -1,0 +1,12 @@
+{
+  "name": "build-ppt",
+  "type": "module",
+  "version": "1.0.0",
+  "dependencies": {
+    "@gltf-transform/core": "^4.3.0",
+    "@gltf-transform/functions": "^4.3.0",
+    "obj2gltf": "^3.2.0",
+    "pg": "^8.21.0",
+    "unzipper": "^0.12.3"
+  }
+}
