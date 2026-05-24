@@ -13,7 +13,9 @@ export function createApp() {
   const app = express();
 
   if (config.trustProxy) {
-    app.set("trust proxy", config.trustProxy);
+    // Convert "1" → 1 so Express treats it as hop-count, not as an IP literal.
+    const trustValue = Number(config.trustProxy);
+    app.set("trust proxy", Number.isFinite(trustValue) ? trustValue : config.trustProxy);
   }
 
   app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
