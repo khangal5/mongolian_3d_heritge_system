@@ -10,8 +10,8 @@
     "dev": "concurrently \"npm:dev:backend\" \"npm:dev:frontend\"",
     "dev:frontend": "npm --prefix frontend run dev",
     "dev:backend": "npm --prefix backend run dev",
-    "build": "npm --prefix frontend run build",
-    "start": "npm --prefix backend run start"
+    "build:frontend": "npm --prefix frontend run build",
+    "start": "node backend/src/server.js"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
