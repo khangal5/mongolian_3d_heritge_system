@@ -37,8 +37,10 @@ export default function ArtifactCard({ artifact }) {
           <span>{artifact.province}</span>
           <span>{artifact.location}</span>
         </div>
-        <h3>{artifact.name}</h3>
-        <p className="artifact-card-title-mn">{artifact.nameMn}</p>
+        <h3>{artifact.nameMn || artifact.name}</h3>
+        {artifact.name && artifact.name !== artifact.nameMn && (
+          <p className="artifact-card-title-mn">{artifact.name}</p>
+        )}
         <p>{artifact.shortDescription}</p>
         <div className="tag-row">
           {artifact.tags.slice(0, 3).map((tag) => (

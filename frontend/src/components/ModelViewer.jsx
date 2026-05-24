@@ -18,6 +18,7 @@ import {
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 
 function inferModelFormat(modelUrl) {
   if (!modelUrl) {
@@ -160,6 +161,10 @@ export default function ModelViewer({ modelUrl, title }) {
       );
     } else {
       const loader = new GLTFLoader();
+      // Draco-compressed GLB-ийг ачаалах боломжтой болгоно
+      const draco = new DRACOLoader();
+      draco.setDecoderPath("https://www.gstatic.com/draco/v1/decoders/");
+      loader.setDRACOLoader(draco);
       loader.load(
         modelUrl,
         (gltf) => {

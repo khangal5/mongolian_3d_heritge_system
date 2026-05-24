@@ -8,7 +8,9 @@ function baseCookieOptions() {
   const isProduction = config.nodeEnv === "production";
   return {
     httpOnly: true,
-    sameSite: "lax",
+    // Cross-origin (Vercel ↔ Azure) requires SameSite=None + Secure in prod.
+    // Локал dev-д lax байх нь хангалттай.
+    sameSite: isProduction ? "none" : "lax",
     secure: isProduction,
     path: "/"
   };

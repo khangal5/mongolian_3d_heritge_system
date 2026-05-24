@@ -47,7 +47,14 @@ const galleryUpload = await createUploadHandler({
 });
 
 function buildPublicAssetUrl(req, pathname) {
-  return `${req.protocol}://${req.get("host")}${pathname}`;
+  // In production the App Service proxy strips TLS, so req.protocol can be
+  // "http" even though the public URL is HTTPS. Force https when the request
+  // came in via TLS (X-Forwarded-Proto) or NODE_ENV=production.
+  const forwarded = req.get("x-forwarded-proto");
+  const protocol =
+    forwarded?.split(",")[0].trim() ||
+    (config.nodeEnv === "production" ? "https" : req.protocol);
+  return `${protocol}://${req.get("host")}${pathname}`;
 }
 
 function normalizeArtifactPayload(body, fallbackId) {
