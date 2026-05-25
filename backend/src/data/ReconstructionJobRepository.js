@@ -1,5 +1,4 @@
 import * as fns from "../repositories/reconstructionRepository.js";
-import { ReconstructionJob } from "../entities/PhotoSet.js";
 
 export class ReconstructionJobRepository {
   async save(job) {
@@ -7,18 +6,15 @@ export class ReconstructionJobRepository {
   }
 
   async findById(id) {
-    const row = await fns.getReconstructionJobById(id);
-    return row ? new ReconstructionJob(row) : null;
+    return fns.getReconstructionJobById(id);
   }
 
   async findAll() {
-    const rows = await fns.listReconstructionJobs();
-    return rows.map((row) => new ReconstructionJob(row));
+    return fns.listReconstructionJobs();
   }
 
   async updateStatus(id, status, extra = {}) {
-    const row = await fns.updateReconstructionJob(id, { status, ...extra });
-    return row ? new ReconstructionJob(row) : null;
+    return fns.updateReconstructionJob(id, { status, ...extra });
   }
 }
 

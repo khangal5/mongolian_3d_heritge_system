@@ -1,6 +1,10 @@
-import { findSessionWithUserByTokenHash, touchSession } from "../repositories/authRepository.js";
+import { authRepository } from "../data/AuthRepository.js";
 import { hashToken } from "../utils/tokens.js";
 import { AUTH_COOKIE_NAME } from "../utils/cookies.js";
+
+const findSessionWithUserByTokenHash = (hash) =>
+  authRepository.findSessionWithUserByTokenHash(hash);
+const touchSession = (id) => authRepository.touchSession(id);
 
 function extractBearerToken(headerValue) {
   if (!headerValue || !headerValue.startsWith("Bearer ")) {

@@ -2,11 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { config } from "../config/env.js";
 import { requireVerifiedResearcher } from "../middleware/auth.js";
-import {
-  createPhotoSetWithJob,
-  getReconstructionJobById,
-  listReconstructionJobs
-} from "../repositories/reconstructionRepository.js";
+import { reconstructionController } from "../controllers/ReconstructionController.js";
 import { enqueueReconstruction } from "../services/reconstructionWorker.js";
 import { createUploadHandler } from "../utils/upload.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -23,12 +19,12 @@ const upload = await createUploadHandler({
 });
 
 router.get("/", asyncHandler(async (_req, res) => {
-  const items = await listReconstructionJobs();
+  const items = await reconstructionController.listJobs();
   res.json({ items, total: items.length });
 }));
 
 router.get("/:id", asyncHandler(async (req, res) => {
-  const item = await getReconstructionJobById(req.params.id);
+  const item = await reconstructionController.getJobById(req.params.id);
 
   if (!item) {
     return res.status(404).json({ message: "Reconstruction job олдсонгүй" });
@@ -48,7 +44,7 @@ router.post(
       return res.status(400).json({ message: "Дор хаяж нэг зураг оруулна уу" });
     }
 
-    const created = await createPhotoSetWithJob({
+    const created = await reconstructionController.uploadPhotoSet({
       photoSet: {
         id: randomUUID(),
         title: req.body.title?.trim() || `Туршилтын багц ${Date.now()}`,

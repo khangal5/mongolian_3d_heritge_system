@@ -1,26 +1,22 @@
 import * as fns from "../repositories/reconstructionRepository.js";
-import { PhotoSet } from "../entities/PhotoSet.js";
 
 export class PhotoSetRepository {
-  async save(photoSet) {
+  async save({ id, title, description, captureNotes, status, images, job, userId }) {
     return fns.createPhotoSetWithJob({
-      photoSet,
-      images: photoSet.images || [],
-      job: photoSet.job || null,
-      createdByUserId: photoSet.userId || null
+      photoSet: { id, title, description, captureNotes, status },
+      images: images || [],
+      job: job || null,
+      createdByUserId: userId || null
     });
   }
 
   async findById(id) {
     const jobs = await fns.listReconstructionJobs();
-    const job = jobs.find((j) => j.photoSetId === id);
-    if (!job) return null;
-    return new PhotoSet({ id, job });
+    return jobs.find((j) => j.photoSetId === id) || null;
   }
 
   async findAll() {
-    const jobs = await fns.listReconstructionJobs();
-    return jobs.map((job) => new PhotoSet({ id: job.photoSetId, job }));
+    return fns.listReconstructionJobs();
   }
 }
 

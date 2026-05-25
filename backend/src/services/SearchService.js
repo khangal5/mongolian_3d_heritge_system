@@ -1,8 +1,8 @@
-import { artifactsRepository } from "../data/ArtifactsRepository.js";
-import { Artifact, ArtifactStatus } from "../entities/Artifact.js";
+import { artifactRepository } from "../data/ArtifactRepository.js";
+import { ArtifactStatus } from "../entities/Artifact.js";
 
 export class SearchService {
-  constructor(repo = artifactsRepository) {
+  constructor(repo = artifactRepository) {
     this.repo = repo;
   }
 
@@ -15,9 +15,10 @@ export class SearchService {
     userLat = null,
     userLng = null,
     sort = "newest",
+    includeItems = true,
     status = ArtifactStatus.APPROVED
   } = {}) {
-    const { items, total, filters } = await this.repo.findAll({
+    return this.repo.searchArtifact({
       q,
       searchBy,
       category,
@@ -26,13 +27,9 @@ export class SearchService {
       userLat,
       userLng,
       sort,
+      includeItems,
       status
     });
-    return {
-      items: items.map((row) => new Artifact(row)),
-      total,
-      filters
-    };
   }
 }
 

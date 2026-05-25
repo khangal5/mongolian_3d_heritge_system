@@ -1,5 +1,4 @@
 import * as fns from "../repositories/artifactsRepository.js";
-import { Artifact } from "../entities/Artifact.js";
 
 export class ArtifactRepository {
   async save(artifact) {
@@ -7,33 +6,23 @@ export class ArtifactRepository {
   }
 
   async findById(id) {
-    // ID-р хайх — odoogiyn function-ууд slug-р хайдаг тул slug-ыг ашиглана
-    const row = await fns.getArtifactBySlug(id);
-    return row ? new Artifact(row) : null;
+    return fns.getArtifactBySlug(id);
   }
 
   async findBySlug(slug) {
-    const row = await fns.getArtifactBySlug(slug);
-    return row ? new Artifact(row) : null;
+    return fns.getArtifactBySlug(slug);
   }
 
   async searchArtifact(criteria) {
-    const { items, total, filters } = await fns.getArtifacts(criteria);
-    return {
-      items: items.map((row) => new Artifact(row)),
-      total,
-      filters
-    };
+    return fns.getArtifacts(criteria);
   }
 
   async findByOwner(ownerId) {
-    const rows = await fns.getArtifactsByOwner(ownerId);
-    return rows.map((row) => new Artifact(row));
+    return fns.getArtifactsByOwner(ownerId);
   }
 
   async findByStatus(status) {
-    const rows = await fns.getArtifactsByStatus(status);
-    return rows.map((row) => new Artifact(row));
+    return fns.getArtifactsByStatus(status);
   }
 
   async update(slug, artifact) {

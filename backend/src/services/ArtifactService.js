@@ -1,50 +1,37 @@
-import { artifactsRepository } from "../data/ArtifactsRepository.js";
-import { Artifact, ArtifactStatus } from "../entities/Artifact.js";
+import { artifactRepository } from "../data/ArtifactRepository.js";
+import { ArtifactStatus } from "../entities/Artifact.js";
 
 export class ArtifactService {
-  constructor(repo = artifactsRepository) {
+  constructor(repo = artifactRepository) {
     this.repo = repo;
   }
 
   async list(options) {
-    const { items, total, filters } = await this.repo.findAll(options);
-    return {
-      items: items.map((row) => new Artifact(row)),
-      total,
-      filters
-    };
+    return this.repo.searchArtifact(options);
   }
 
   async listByOwner(ownerId) {
-    const rows = await this.repo.findByOwner(ownerId);
-    return rows.map((row) => new Artifact(row));
+    return this.repo.findByOwner(ownerId);
   }
 
   async getBySlug(slug) {
-    const row = await this.repo.findBySlug(slug);
-    return row ? new Artifact(row) : null;
+    return this.repo.findBySlug(slug);
   }
 
   async create(data) {
-    const artifact = new Artifact({ ...data, status: data.status || ArtifactStatus.NEW });
-    const row = await this.repo.create(artifact);
-    return new Artifact(row);
+    return this.repo.save({ ...data, status: data.status || ArtifactStatus.NEW });
   }
 
   async update(slug, data) {
-    const artifact = new Artifact(data);
-    const row = await this.repo.update(slug, artifact);
-    return row ? new Artifact(row) : null;
+    return this.repo.update(slug, data);
   }
 
   async submit(slug) {
-    const row = await this.repo.setStatus(slug, { status: ArtifactStatus.PENDING });
-    return row ? new Artifact(row) : null;
+    return this.repo.setStatus(slug, { status: ArtifactStatus.PENDING });
   }
 
   async returnToNew(slug) {
-    const row = await this.repo.setStatus(slug, { status: ArtifactStatus.NEW });
-    return row ? new Artifact(row) : null;
+    return this.repo.setStatus(slug, { status: ArtifactStatus.NEW });
   }
 
   async delete(slug) {

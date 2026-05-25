@@ -2,27 +2,9 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { Router } from "express";
 import { config } from "../config/env.js";
-import {
-  consumeEmailVerification,
-  consumePasswordResetToken,
-  createEmailVerification,
-  createPasswordResetToken,
-  createSession,
-  createUser,
-  deleteAllSessionsForUser,
-  deletePendingPasswordResets,
-  deletePendingVerificationsForUser,
-  deleteSessionByTokenHash,
-  findEmailVerificationByTokenHash,
-  findPasswordResetTokenByHash,
-  findUserByEmail,
-  findUserById,
-  listResearchersWithVerifications,
-  setUserVerificationStatus,
-  updateUserPassword
-} from "../repositories/authRepository.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
+import { authController } from "../controllers/AuthController.js";
 import {
   forgotPasswordSchema,
   loginSchema,
@@ -36,8 +18,6 @@ import {
   sendVerificationEmail,
   whitelistDescription
 } from "../utils/email.js";
-import { hashPassword, verifyPassword } from "../utils/password.js";
-import { generateToken, hashToken } from "../utils/tokens.js";
 import { createUploadHandler } from "../utils/upload.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { clearAuthCookie, setAuthCookie } from "../utils/cookies.js";
@@ -53,8 +33,6 @@ const upload = await createUploadHandler({
   defaultExtension: ".jpg"
 });
 
-const VERIFICATION_TTL_MS = 1000 * 60 * 60 * 24;
-
 function presentVerification(verification) {
   const payload = { delivered: verification.delivered };
   if (verification.delivered === "console") {
@@ -66,26 +44,13 @@ function presentVerification(verification) {
   return payload;
 }
 
-async function issueVerification(user) {
-  await deletePendingVerificationsForUser(user.id);
-  const token = generateToken();
-  const expiresAt = new Date(Date.now() + VERIFICATION_TTL_MS).toISOString();
-
-  await createEmailVerification({
-    id: randomUUID(),
-    userId: user.id,
-    tokenHash: hashToken(token),
-    email: user.email,
-    expiresAt
-  });
-
-  const sendResult = await sendVerificationEmail({
+async function issueAndSendVerification(user) {
+  const token = await authController.issueEmailVerification(user);
+  return sendVerificationEmail({
     to: user.email,
-    fullName: user.fullName,
+    fullName: user.fullName || user.full_name,
     token
   });
-
-  return sendResult;
 }
 
 router.post(
@@ -117,18 +82,19 @@ router.post(
       });
     }
 
-    const existingUser = await findUserByEmail(email);
+    const existingUser = await authController.findUserByEmail(email);
 
     if (existingUser) {
       return res.status(409).json({ message: "Энэ имэйлтэй хэрэглэгч бүртгэлтэй байна" });
     }
 
-    const user = await createUser({
+    const user = await authController.createUser({
       id: randomUUID(),
       fullName,
       email,
       institutionEmail: email,
-      passwordHash: hashPassword(password),
+      passwordHash: undefined,
+      password,
       role: "researcher",
       organization,
       departmentName: departmentName || null,
@@ -141,7 +107,7 @@ router.post(
       verificationStatus: "submitted"
     });
 
-    const verification = await issueVerification(user);
+    const verification = await issueAndSendVerification(user);
 
     return res.status(201).json({
       message:
@@ -158,22 +124,13 @@ router.post(
   asyncHandler(async (req, res) => {
     const { email, password } = req.body;
 
-    const userRow = await findUserByEmail(email);
+    const userRow = await authController.verifyCredentials(email, password);
 
-    if (!userRow || !verifyPassword(password, userRow.password_hash)) {
+    if (!userRow) {
       return res.status(401).json({ message: "Имэйл эсвэл нууц үг буруу байна" });
     }
 
-    const token = generateToken();
-    const SESSION_TTL_MS = 1000 * 60 * 60 * 24;
-
-    await createSession({
-      id: randomUUID(),
-      userId: userRow.id,
-      tokenHash: hashToken(token),
-      expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString()
-    });
-
+    const { token } = await authController.createSession(userRow.id);
     setAuthCookie(res, token);
 
     return res.json({
@@ -203,22 +160,17 @@ router.get("/me", requireAuth, (req, res) => {
 });
 
 router.post("/logout", requireAuth, asyncHandler(async (req, res) => {
-    const cookieToken = req.cookies?.heritage_session;
-    const headerToken = req.headers.authorization?.startsWith("Bearer ")
-      ? req.headers.authorization.slice("Bearer ".length).trim()
-      : null;
-    const token = cookieToken || headerToken;
+  const cookieToken = req.cookies?.heritage_session;
+  const headerToken = req.headers.authorization?.startsWith("Bearer ")
+    ? req.headers.authorization.slice("Bearer ".length).trim()
+    : null;
+  const token = cookieToken || headerToken;
 
-    if (token) {
-      await deleteSessionByTokenHash(hashToken(token));
-    }
+  await authController.logout(token);
+  clearAuthCookie(res);
 
-    clearAuthCookie(res);
-
-    return res.status(204).send();
+  return res.status(204).send();
 }));
-
-const PASSWORD_RESET_TTL_MS = 1000 * 60 * 60;
 
 router.post(
   "/forgot-password",
@@ -234,27 +186,17 @@ router.post(
       return res.json(genericResponse);
     }
 
-    const userRow = await findUserByEmail(email);
-    if (!userRow) {
+    const result = await authController.requestPasswordReset(email);
+    if (!result) {
       return res.json(genericResponse);
     }
-
-    await deletePendingPasswordResets(userRow.id);
-
-    const token = generateToken();
-    await createPasswordResetToken({
-      id: randomUUID(),
-      userId: userRow.id,
-      tokenHash: hashToken(token),
-      expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS).toISOString()
-    });
 
     const payload = { ...genericResponse };
     try {
       const sendResult = await sendPasswordResetEmail({
-        to: userRow.email,
-        fullName: userRow.full_name,
-        token
+        to: result.user.email,
+        fullName: result.user.full_name,
+        token: result.token
       });
       if (sendResult.delivered === "console") {
         payload.devLink = sendResult.link;
@@ -275,24 +217,17 @@ router.post(
   validate({ body: resetPasswordSchema }),
   asyncHandler(async (req, res) => {
     const { token, password } = req.body;
+    const result = await authController.resetPassword(token, password);
 
-    const record = await findPasswordResetTokenByHash(hashToken(token));
-
-    if (!record) {
+    if (result.status === "not_found") {
       return res.status(404).json({ message: "Холбоос буруу эсвэл ашиглагдсан" });
     }
-
-    if (record.consumed_at) {
+    if (result.status === "consumed") {
       return res.status(409).json({ message: "Энэ холбоосоор аль хэдийн нууц үг сэргээгдсэн" });
     }
-
-    if (new Date(record.expires_at) < new Date()) {
+    if (result.status === "expired") {
       return res.status(410).json({ message: "Холбоосын хүчинтэй хугацаа дууссан" });
     }
-
-    await updateUserPassword(record.user_id, hashPassword(password));
-    await consumePasswordResetToken(record.id);
-    await deleteAllSessionsForUser(record.user_id);
 
     return res.json({ message: "Нууц үг амжилттай сэргээгдлээ. Та шинэ нууц үгээрээ нэвтэрнэ үү." });
   })
@@ -303,51 +238,43 @@ router.post(
   validate({ body: verifyEmailSchema }),
   asyncHandler(async (req, res) => {
     const { token } = req.body;
+    const result = await authController.verifyEmail(token);
 
-    const record = await findEmailVerificationByTokenHash(hashToken(token));
-
-    if (!record) {
+    if (result.status === "not_found") {
       return res.status(404).json({ message: "Баталгаажуулах холбоос буруу эсвэл ашиглагдсан" });
     }
-
-    if (record.consumed_at) {
+    if (result.status === "consumed") {
       return res.status(409).json({ message: "Энэ холбоосоор аль хэдийн баталгаажсан" });
     }
-
-    if (new Date(record.expires_at) < new Date()) {
+    if (result.status === "expired") {
       return res.status(410).json({ message: "Баталгаажуулах холбоосын хүчинтэй хугацаа дууссан" });
     }
 
-    await setUserVerificationStatus(record.user_id, "verified");
-    await consumeEmailVerification(record.id);
-
-    return res.json({
-      message: "Имэйл амжилттай баталгаажлаа."
-    });
+    return res.json({ message: "Имэйл амжилттай баталгаажлаа." });
   })
 );
 
 router.post("/resend-verification", requireAuth, asyncHandler(async (req, res) => {
-    const userRow = await findUserById(req.user.id);
+  const userRow = await authController.findUserById(req.user.id);
 
-    if (!userRow) {
-      return res.status(404).json({ message: "Хэрэглэгч олдсонгүй" });
-    }
+  if (!userRow) {
+    return res.status(404).json({ message: "Хэрэглэгч олдсонгүй" });
+  }
 
-    if (userRow.verificationStatus === "verified") {
-      return res.status(409).json({ message: "Имэйл аль хэдийн баталгаажсан" });
-    }
+  if (userRow.verificationStatus === "verified") {
+    return res.status(409).json({ message: "Имэйл аль хэдийн баталгаажсан" });
+  }
 
-    const verification = await issueVerification(userRow);
+  const verification = await issueAndSendVerification(userRow);
 
-    return res.json({
-      message: "Шинэ баталгаажуулах холбоос албан имэйл рүү илгээгдлээ",
-      verification: presentVerification(verification)
-    });
+  return res.json({
+    message: "Шинэ баталгаажуулах холбоос албан имэйл рүү илгээгдлээ",
+    verification: presentVerification(verification)
+  });
 }));
 
 router.get("/admin/researchers", requireRole("admin"), asyncHandler(async (_req, res) => {
-  const items = await listResearchersWithVerifications();
+  const items = await authController.listResearchers();
   res.json({ items, total: items.length });
 }));
 
@@ -355,15 +282,14 @@ router.post(
   "/admin/researchers/:id/verify",
   requireRole("admin"),
   asyncHandler(async (req, res) => {
-    const target = await findUserById(req.params.id);
+    const target = await authController.findUserById(req.params.id);
     if (!target) {
       return res.status(404).json({ message: "Хэрэглэгч олдсонгүй" });
     }
     if (target.verificationStatus === "verified") {
       return res.status(409).json({ message: "Аль хэдийн баталгаажсан" });
     }
-    await setUserVerificationStatus(target.id, "verified");
-    await deletePendingVerificationsForUser(target.id);
+    await authController.setVerificationStatus(target.id, "verified");
     return res.json({ message: "Хэрэглэгчийг гар аргаар баталгаажууллаа" });
   })
 );
@@ -372,12 +298,11 @@ router.post(
   "/admin/researchers/:id/revoke",
   requireRole("admin"),
   asyncHandler(async (req, res) => {
-    const target = await findUserById(req.params.id);
+    const target = await authController.findUserById(req.params.id);
     if (!target) {
       return res.status(404).json({ message: "Хэрэглэгч олдсонгүй" });
     }
-    await setUserVerificationStatus(target.id, "submitted");
-    await deletePendingVerificationsForUser(target.id);
+    await authController.setVerificationStatus(target.id, "submitted");
     return res.json({ message: "Баталгаажуулалтыг хүчингүй болголоо" });
   })
 );
