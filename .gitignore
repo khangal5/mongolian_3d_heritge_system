@@ -10,3 +10,5 @@ coverage/
 DIPLOM__1_/
 backend/uploads/
 model/
+demo/
+scripts/photogrammetry-roundtrip.mjs
