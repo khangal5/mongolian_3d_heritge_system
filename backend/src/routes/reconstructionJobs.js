@@ -40,7 +40,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
 router.post(
   "/upload",
   requireVerifiedResearcher,
-  upload.array("images", 60),
+  upload.array("images", 200),
   asyncHandler(async (req, res) => {
     const files = req.files || [];
 

@@ -80,8 +80,18 @@ export async function analyzeImage(image) {
   }
 }
 
+async function analyzeInBatches(images, batchSize = 5) {
+  const results = [];
+  for (let i = 0; i < images.length; i += batchSize) {
+    const batch = images.slice(i, i + batchSize);
+    const batchResults = await Promise.all(batch.map(analyzeImage));
+    results.push(...batchResults);
+  }
+  return results;
+}
+
 export async function analyzePhotoSet(images) {
-  const results = await Promise.all(images.map(analyzeImage));
+  const results = await analyzeInBatches(images, 5);
 
   const total = results.length;
   const okCount = results.filter((r) => r.ok).length;
