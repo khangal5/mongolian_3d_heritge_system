@@ -104,8 +104,8 @@ export default function ReconstructionLabPage() {
     <Layout sidebar={<UserSidebar user={auth.user} />}>
       <header className="dash-header">
         <div>
-          <h1 className="dash-title">Reconstruction Lab</h1>
-          <p className="dash-sub">Олон зурагнаас 3D загвар үүсгэхэд зориулсан зургийн багц байршуулж, чанарын автомат шалгалт хийнэ.</p>
+          <h1 className="dash-title">Зургийн багц шалгах самбар</h1>
+          <p className="dash-sub">3D загвар үүсгэхэд зориулсан зургийн багцыг байршуулж, чанарын автомат шалгалт хийнэ.</p>
         </div>
       </header>
 

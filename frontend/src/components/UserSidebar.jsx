@@ -4,7 +4,7 @@ const RESEARCHER_ITEMS = [
   { to: "/dashboard", label: "Хяналтын самбар" },
   { to: "/dashboard", label: "Миний олдворууд", end: false },
   { to: "/artifacts/new", label: "Шинэ олдвор" },
-  { to: "/reconstruction-lab", label: "Reconstruction Lab" }
+  { to: "/reconstruction-lab", label: "Зургийн багц шалгах" }
 ];
 
 const ADMIN_ITEMS = [
