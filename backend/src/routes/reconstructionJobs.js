@@ -16,7 +16,7 @@ const router = Router();
 const upload = await createUploadHandler({
   destinationDir: config.uploadDir,
   mimeWhitelist: new Set(["image/jpeg", "image/jpg", "image/png"]),
-  maxFiles: 60,
+  maxFiles: 200,
   maxFileSizeBytes: 15 * 1024 * 1024,
   errorMessage: "Зөвхөн JPG эсвэл PNG форматтай зураг оруулах боломжтой",
   defaultExtension: ".jpg"
